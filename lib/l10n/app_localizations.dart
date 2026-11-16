@@ -109,6 +109,282 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'هيكل التطبيق جاهز'**
   String get phaseOneReady;
+
+  /// No description provided for @tileGallery.
+  ///
+  /// In ar, this message translates to:
+  /// **'معرض القطع'**
+  String get tileGallery;
+
+  /// No description provided for @tablePreview.
+  ///
+  /// In ar, this message translates to:
+  /// **'معاينة الطاولة'**
+  String get tablePreview;
+
+  /// No description provided for @skinIvory.
+  ///
+  /// In ar, this message translates to:
+  /// **'عاجي'**
+  String get skinIvory;
+
+  /// No description provided for @skinEbony.
+  ///
+  /// In ar, this message translates to:
+  /// **'أبنوس'**
+  String get skinEbony;
+
+  /// No description provided for @skinRuby.
+  ///
+  /// In ar, this message translates to:
+  /// **'ياقوتي'**
+  String get skinRuby;
+
+  /// No description provided for @play.
+  ///
+  /// In ar, this message translates to:
+  /// **'العب'**
+  String get play;
+
+  /// No description provided for @settings.
+  ///
+  /// In ar, this message translates to:
+  /// **'الإعدادات'**
+  String get settings;
+
+  /// No description provided for @chooseMode.
+  ///
+  /// In ar, this message translates to:
+  /// **'اختر نمط اللعب'**
+  String get chooseMode;
+
+  /// No description provided for @modeTwoPlayers.
+  ///
+  /// In ar, this message translates to:
+  /// **'لاعبان'**
+  String get modeTwoPlayers;
+
+  /// No description provided for @modeTwoPlayersDesc.
+  ///
+  /// In ar, this message translates to:
+  /// **'مواجهة مباشرة، سبع قطع لكل لاعب'**
+  String get modeTwoPlayersDesc;
+
+  /// No description provided for @modeFourPlayers.
+  ///
+  /// In ar, this message translates to:
+  /// **'أربعة لاعبين'**
+  String get modeFourPlayers;
+
+  /// No description provided for @modeFourPlayersDesc.
+  ///
+  /// In ar, this message translates to:
+  /// **'فريقان، وشريكك يجلس مقابلك'**
+  String get modeFourPlayersDesc;
+
+  /// No description provided for @modeAzneef.
+  ///
+  /// In ar, this message translates to:
+  /// **'أزنيف'**
+  String get modeAzneef;
+
+  /// No description provided for @comingSoon.
+  ///
+  /// In ar, this message translates to:
+  /// **'قريباً'**
+  String get comingSoon;
+
+  /// No description provided for @gameScreenComingSoon.
+  ///
+  /// In ar, this message translates to:
+  /// **'شاشة اللعب تأتي في الخطوة القادمة'**
+  String get gameScreenComingSoon;
+
+  /// No description provided for @targetScoreLabel.
+  ///
+  /// In ar, this message translates to:
+  /// **'الهدف: {score} نقطة'**
+  String targetScoreLabel(int score);
+
+  /// No description provided for @settingsLanguage.
+  ///
+  /// In ar, this message translates to:
+  /// **'اللغة'**
+  String get settingsLanguage;
+
+  /// No description provided for @settingsTargetScore.
+  ///
+  /// In ar, this message translates to:
+  /// **'هدف النقاط (الافتراضي للعب المحلي)'**
+  String get settingsTargetScore;
+
+  /// No description provided for @settingsTileSkin.
+  ///
+  /// In ar, this message translates to:
+  /// **'شكل القطع'**
+  String get settingsTileSkin;
+
+  /// No description provided for @settingsSound.
+  ///
+  /// In ar, this message translates to:
+  /// **'الأصوات'**
+  String get settingsSound;
+
+  /// No description provided for @playerYou.
+  ///
+  /// In ar, this message translates to:
+  /// **'أنت'**
+  String get playerYou;
+
+  /// No description provided for @playerPartner.
+  ///
+  /// In ar, this message translates to:
+  /// **'شريكك'**
+  String get playerPartner;
+
+  /// No description provided for @opponentRight.
+  ///
+  /// In ar, this message translates to:
+  /// **'الخصم الأيمن'**
+  String get opponentRight;
+
+  /// No description provided for @opponentLeft.
+  ///
+  /// In ar, this message translates to:
+  /// **'الخصم الأيسر'**
+  String get opponentLeft;
+
+  /// No description provided for @opponentSingle.
+  ///
+  /// In ar, this message translates to:
+  /// **'الخصم'**
+  String get opponentSingle;
+
+  /// No description provided for @teamUs.
+  ///
+  /// In ar, this message translates to:
+  /// **'فريقنا'**
+  String get teamUs;
+
+  /// No description provided for @teamThem.
+  ///
+  /// In ar, this message translates to:
+  /// **'فريقهم'**
+  String get teamThem;
+
+  /// No description provided for @targetShort.
+  ///
+  /// In ar, this message translates to:
+  /// **'الهدف'**
+  String get targetShort;
+
+  /// No description provided for @tilesLeft.
+  ///
+  /// In ar, this message translates to:
+  /// **'القطع: {count}'**
+  String tilesLeft(int count);
+
+  /// No description provided for @boneyardCount.
+  ///
+  /// In ar, this message translates to:
+  /// **'السحب: {count}'**
+  String boneyardCount(int count);
+
+  /// No description provided for @passButton.
+  ///
+  /// In ar, this message translates to:
+  /// **'ما عندي'**
+  String get passButton;
+
+  /// No description provided for @drawButton.
+  ///
+  /// In ar, this message translates to:
+  /// **'اسحب'**
+  String get drawButton;
+
+  /// No description provided for @featureComingSoon.
+  ///
+  /// In ar, this message translates to:
+  /// **'هذه الميزة تأتي في مرحلة لاحقة'**
+  String get featureComingSoon;
+
+  /// No description provided for @previewRoundResult.
+  ///
+  /// In ar, this message translates to:
+  /// **'معاينة نتيجة الجولة'**
+  String get previewRoundResult;
+
+  /// No description provided for @weWonRound.
+  ///
+  /// In ar, this message translates to:
+  /// **'فزتم بالجولة'**
+  String get weWonRound;
+
+  /// No description provided for @theyWonRound.
+  ///
+  /// In ar, this message translates to:
+  /// **'فاز الخصم بالجولة'**
+  String get theyWonRound;
+
+  /// No description provided for @roundBurned.
+  ///
+  /// In ar, this message translates to:
+  /// **'جولة محروقة'**
+  String get roundBurned;
+
+  /// No description provided for @reasonDomino.
+  ///
+  /// In ar, this message translates to:
+  /// **'أنهى لاعب كل قطعه'**
+  String get reasonDomino;
+
+  /// No description provided for @reasonBlocked.
+  ///
+  /// In ar, this message translates to:
+  /// **'انقفلت اللعبة، والأقل نقاطاً يفوز'**
+  String get reasonBlocked;
+
+  /// No description provided for @reasonBurned.
+  ///
+  /// In ar, this message translates to:
+  /// **'تعادل عند القفل، بدون نقاط وتُعاد الجولة'**
+  String get reasonBurned;
+
+  /// No description provided for @roundPoints.
+  ///
+  /// In ar, this message translates to:
+  /// **'نقاط الجولة: {points}'**
+  String roundPoints(int points);
+
+  /// No description provided for @totalsLine.
+  ///
+  /// In ar, this message translates to:
+  /// **'المجموع: {ours} مقابل {theirs}'**
+  String totalsLine(int ours, int theirs);
+
+  /// No description provided for @nextRound.
+  ///
+  /// In ar, this message translates to:
+  /// **'الجولة التالية'**
+  String get nextRound;
+
+  /// No description provided for @youStartRound.
+  ///
+  /// In ar, this message translates to:
+  /// **'تبدأ الجولة بالقطعة {piece}'**
+  String youStartRound(String piece);
+
+  /// No description provided for @otherStartsRound.
+  ///
+  /// In ar, this message translates to:
+  /// **'{name} يبدأ الجولة بالقطعة {piece}'**
+  String otherStartsRound(String name, String piece);
+
+  /// No description provided for @redeal.
+  ///
+  /// In ar, this message translates to:
+  /// **'إعادة التوزيع'**
+  String get redeal;
 }
 
 class _AppLocalizationsDelegate

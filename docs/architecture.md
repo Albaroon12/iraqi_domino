@@ -21,6 +21,16 @@ Status: DRAFT v0.1
 - Rules live in GameRulesConfig, so Azneef can be added as a variant
   (spinner support) without rewriting core logic.
 - Backend decision deferred to Phase 7 (Firebase vs Dart WebSocket server).
+- Settings live in a Riverpod NotifierProvider (immutable SettingsState).
+  The app root watches the language from it, so switching language
+  updates direction (RTL/LTR) instantly. Persistence is added in step 2.5.
+- Screens receive plain data (names, scores, counts) and know nothing about
+  the engine, so the game screen layout is independent of the visual style.
+  A future redesign changes widgets/painters, not the layout contract.
+- Settings live in a Riverpod NotifierProvider (immutable SettingsState),
+  persisted with shared_preferences (small key/value data only). Storage is
+  injected via sharedPreferencesProvider so tests use a fake one. Invalid
+  saved values fall back to defaults.
 
 ## Proposed Folder Structure
 lib/
@@ -35,3 +45,6 @@ docs/
   an interface so the engine can be swapped in without rewrites.
 - Legal/platform review for any real-money feature.
 - Rule ambiguity: tracked as [ASSUMED] items in game_rules.md.
+- Each match carries its own GameRulesConfig (target score, later more
+  options). A running match never reads the global settings. Online, the
+  server stores the config in the room and uses the same object.

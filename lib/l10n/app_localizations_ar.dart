@@ -14,4 +14,156 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get phaseOneReady => 'هيكل التطبيق جاهز';
+
+  @override
+  String get tileGallery => 'معرض القطع';
+
+  @override
+  String get tablePreview => 'معاينة الطاولة';
+
+  @override
+  String get skinIvory => 'عاجي';
+
+  @override
+  String get skinEbony => 'أبنوس';
+
+  @override
+  String get skinRuby => 'ياقوتي';
+
+  @override
+  String get play => 'العب';
+
+  @override
+  String get settings => 'الإعدادات';
+
+  @override
+  String get chooseMode => 'اختر نمط اللعب';
+
+  @override
+  String get modeTwoPlayers => 'لاعبان';
+
+  @override
+  String get modeTwoPlayersDesc => 'مواجهة مباشرة، سبع قطع لكل لاعب';
+
+  @override
+  String get modeFourPlayers => 'أربعة لاعبين';
+
+  @override
+  String get modeFourPlayersDesc => 'فريقان، وشريكك يجلس مقابلك';
+
+  @override
+  String get modeAzneef => 'أزنيف';
+
+  @override
+  String get comingSoon => 'قريباً';
+
+  @override
+  String get gameScreenComingSoon => 'شاشة اللعب تأتي في الخطوة القادمة';
+
+  @override
+  String targetScoreLabel(int score) {
+    return 'الهدف: $score نقطة';
+  }
+
+  @override
+  String get settingsLanguage => 'اللغة';
+
+  @override
+  String get settingsTargetScore => 'هدف النقاط (الافتراضي للعب المحلي)';
+
+  @override
+  String get settingsTileSkin => 'شكل القطع';
+
+  @override
+  String get settingsSound => 'الأصوات';
+
+  @override
+  String get playerYou => 'أنت';
+
+  @override
+  String get playerPartner => 'شريكك';
+
+  @override
+  String get opponentRight => 'الخصم الأيمن';
+
+  @override
+  String get opponentLeft => 'الخصم الأيسر';
+
+  @override
+  String get opponentSingle => 'الخصم';
+
+  @override
+  String get teamUs => 'فريقنا';
+
+  @override
+  String get teamThem => 'فريقهم';
+
+  @override
+  String get targetShort => 'الهدف';
+
+  @override
+  String tilesLeft(int count) {
+    return 'القطع: $count';
+  }
+
+  @override
+  String boneyardCount(int count) {
+    return 'السحب: $count';
+  }
+
+  @override
+  String get passButton => 'ما عندي';
+
+  @override
+  String get drawButton => 'اسحب';
+
+  @override
+  String get featureComingSoon => 'هذه الميزة تأتي في مرحلة لاحقة';
+
+  @override
+  String get previewRoundResult => 'معاينة نتيجة الجولة';
+
+  @override
+  String get weWonRound => 'فزتم بالجولة';
+
+  @override
+  String get theyWonRound => 'فاز الخصم بالجولة';
+
+  @override
+  String get roundBurned => 'جولة محروقة';
+
+  @override
+  String get reasonDomino => 'أنهى لاعب كل قطعه';
+
+  @override
+  String get reasonBlocked => 'انقفلت اللعبة، والأقل نقاطاً يفوز';
+
+  @override
+  String get reasonBurned => 'تعادل عند القفل، بدون نقاط وتُعاد الجولة';
+
+  @override
+  String roundPoints(int points) {
+    return 'نقاط الجولة: $points';
+  }
+
+  @override
+  String totalsLine(int ours, int theirs) {
+    return 'المجموع: $ours مقابل $theirs';
+  }
+
+  @override
+  String get nextRound => 'الجولة التالية';
+
+  @override
+  String youStartRound(String piece) {
+    return 'تبدأ الجولة بالقطعة $piece';
+  }
+
+  @override
+  String otherStartsRound(String name, String piece) {
+    return '$name يبدأ الجولة بالقطعة $piece';
+  }
+
+  @override
+  String get redeal => 'إعادة التوزيع';
 }

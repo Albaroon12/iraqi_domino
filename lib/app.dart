@@ -1,26 +1,29 @@
 import 'package:flutter_localizations/flutter_localizations.dart'
     show GlobalWidgetsLocalizations;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'core/theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
-import 'ui/screens/home_shell_screen.dart';
+import 'state/settings_provider.dart';
+import 'ui/screens/main_menu_screen.dart';
 
 /// Root widget of the game.
-class IraqiDominoApp extends StatelessWidget {
+class IraqiDominoApp extends ConsumerWidget {
   const IraqiDominoApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The language comes from the settings, so changing it there
+    // rebuilds the whole app in the new language and direction.
+    final locale = ref.watch(settingsProvider).locale;
+
     return MaterialApp(
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       theme: AppTheme.dark,
       debugShowCheckedModeBanner: false,
-
-      // Arabic-first. Flutter flips the layout to RTL automatically for 'ar'.
-      locale: const Locale('ar'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
-
       localizationsDelegates: const [
         // Our own translated strings (generated from the .arb files).
         AppLocalizations.delegate,
@@ -29,8 +32,7 @@ class IraqiDominoApp extends StatelessWidget {
         // Text direction and basic widget translations.
         GlobalWidgetsLocalizations.delegate,
       ],
-
-      home: const HomeShellScreen(),
+      home: const MainMenuScreen(),
     );
   }
 }

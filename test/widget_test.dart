@@ -1,14 +1,21 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:iraqi_domino/app.dart';
+
+import 'helpers/test_app.dart';
 
 void main() {
-  testWidgets('App shell shows the Arabic title', (tester) async {
-    await tester.pumpWidget(
-      const ProviderScope(child: IraqiDominoApp()),
-    );
+  testWidgets('App shows the Arabic title by default', (tester) async {
+    await tester.pumpWidget(await buildTestApp());
     await tester.pumpAndSettle();
 
     expect(find.text('الدومينو العراقي'), findsWidgets);
+  });
+
+  testWidgets('App starts in the saved language', (tester) async {
+    await tester.pumpWidget(
+      await buildTestApp({'settings.language': 'en'}),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Iraqi Domino'), findsWidgets);
   });
 }

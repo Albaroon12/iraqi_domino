@@ -78,6 +78,10 @@ Items marked **[ASSUMED]** were not explicitly confirmed and need owner review.
 - Default target: 151 points (2 and 4 players).
 - Target is configurable before the match (e.g. 200, 250).
 - First side to reach or exceed the target wins the match.
+- Online games: the target score is a ROOM setting chosen by the room
+  creator before the match. Joining players see it but cannot change it.
+  The app-wide setting is only the default for local games and for rooms
+  the player creates.
 
 ## 9. Configurable Rules (GameRulesConfig)
 - targetScore (default 151)

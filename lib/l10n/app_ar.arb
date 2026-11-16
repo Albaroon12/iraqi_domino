@@ -1,5 +1,107 @@
 {
   "@@locale": "ar",
   "appTitle": "الدومينو العراقي",
-  "phaseOneReady": "هيكل التطبيق جاهز"
+  "phaseOneReady": "هيكل التطبيق جاهز",
+  "tileGallery": "معرض القطع",
+  "tablePreview": "معاينة الطاولة",
+  "skinIvory": "عاجي",
+  "skinEbony": "أبنوس",
+  "skinRuby": "ياقوتي",
+  "play": "العب",
+  "settings": "الإعدادات",
+  "chooseMode": "اختر نمط اللعب",
+  "modeTwoPlayers": "لاعبان",
+  "modeTwoPlayersDesc": "مواجهة مباشرة، سبع قطع لكل لاعب",
+  "modeFourPlayers": "أربعة لاعبين",
+  "modeFourPlayersDesc": "فريقان، وشريكك يجلس مقابلك",
+  "modeAzneef": "أزنيف",
+  "comingSoon": "قريباً",
+  "gameScreenComingSoon": "شاشة اللعب تأتي في الخطوة القادمة",
+  "targetScoreLabel": "الهدف: {score} نقطة",
+  "@targetScoreLabel": {
+    "placeholders": {
+      "score": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsLanguage": "اللغة",
+  "settingsTargetScore": "هدف النقاط (الافتراضي للعب المحلي)",
+  "settingsTileSkin": "شكل القطع",
+  "settingsSound": "الأصوات",
+  "playerYou": "أنت",
+  "playerPartner": "شريكك",
+  "opponentRight": "الخصم الأيمن",
+  "opponentLeft": "الخصم الأيسر",
+  "opponentSingle": "الخصم",
+  "teamUs": "فريقنا",
+  "teamThem": "فريقهم",
+  "targetShort": "الهدف",
+  "tilesLeft": "القطع: {count}",
+  "@tilesLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "boneyardCount": "السحب: {count}",
+  "@boneyardCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "passButton": "ما عندي",
+  "drawButton": "اسحب",
+  "featureComingSoon": "هذه الميزة تأتي في مرحلة لاحقة",
+  "previewRoundResult": "معاينة نتيجة الجولة",
+  "weWonRound": "فزتم بالجولة",
+  "theyWonRound": "فاز الخصم بالجولة",
+  "roundBurned": "جولة محروقة",
+  "reasonDomino": "أنهى لاعب كل قطعه",
+  "reasonBlocked": "انقفلت اللعبة، والأقل نقاطاً يفوز",
+  "reasonBurned": "تعادل عند القفل، بدون نقاط وتُعاد الجولة",
+  "roundPoints": "نقاط الجولة: {points}",
+  "@roundPoints": {
+    "placeholders": {
+      "points": {
+        "type": "int"
+      }
+    }
+  },
+  "totalsLine": "المجموع: {ours} مقابل {theirs}",
+  "@totalsLine": {
+    "placeholders": {
+      "ours": {
+        "type": "int"
+      },
+      "theirs": {
+        "type": "int"
+      }
+    }
+  },
+  "nextRound": "الجولة التالية",
+    "youStartRound": "تبدأ الجولة بالقطعة {piece}",
+  "@youStartRound": {
+    "placeholders": {
+      "piece": {
+        "type": "String"
+      }
+    }
+  },
+  "otherStartsRound": "{name} يبدأ الجولة بالقطعة {piece}",
+  "@otherStartsRound": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "piece": {
+        "type": "String"
+      }
+    }
+  },
+  "redeal": "إعادة التوزيع"
+
 }
