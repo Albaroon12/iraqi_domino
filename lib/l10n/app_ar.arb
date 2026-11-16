@@ -102,6 +102,39 @@
       }
     }
   },
-  "redeal": "إعادة التوزيع"
+  "redeal": "إعادة التوزيع",
+    "youStartRoundFree": "تبدأ الجولة بأي قطعة",
+  "otherStartsRoundFree": "{name} يبدأ الجولة",
+  "@otherStartsRoundFree": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "saysNoTiles": "{name}: ما عندي",
+  "@saysNoTiles": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "passesTurn": "{name}: عبور",
+  "@passesTurn": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "drawsTile": "{name}: سحب قطعة",
+  "@drawsTile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 
 }

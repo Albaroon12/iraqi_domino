@@ -166,4 +166,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get redeal => 'Deal again';
+
+  @override
+  String get youStartRoundFree => 'You start the round with any piece';
+
+  @override
+  String otherStartsRoundFree(String name) {
+    return '$name starts the round';
+  }
+
+  @override
+  String saysNoTiles(String name) {
+    return '$name: I have none';
+  }
+
+  @override
+  String passesTurn(String name) {
+    return '$name: passes';
+  }
+
+  @override
+  String drawsTile(String name) {
+    return '$name: draws a tile';
+  }
 }

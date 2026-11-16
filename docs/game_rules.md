@@ -45,6 +45,11 @@ Items marked **[ASSUMED]** were not explicitly confirmed and need owner review.
 - 2 players: the player draws from the boneyard.
   **[ASSUMED]** draws until a playable tile is obtained; if the boneyard
   is empty, the player passes.
+- Passing and drawing are AUTOMATIC: when the player on turn has no legal
+  move, the game says "I have none" / passes (or draws with two players)
+  after a short delay. The player never presses a button for it.
+- Legal moves are computed only for the player whose turn it is, because
+  hands change after every move.
 
 ## 7. End of Round
 ### 7.1 Domino (out)

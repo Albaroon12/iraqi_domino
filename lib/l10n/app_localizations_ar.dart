@@ -166,4 +166,27 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get redeal => 'إعادة التوزيع';
+
+  @override
+  String get youStartRoundFree => 'تبدأ الجولة بأي قطعة';
+
+  @override
+  String otherStartsRoundFree(String name) {
+    return '$name يبدأ الجولة';
+  }
+
+  @override
+  String saysNoTiles(String name) {
+    return '$name: ما عندي';
+  }
+
+  @override
+  String passesTurn(String name) {
+    return '$name: عبور';
+  }
+
+  @override
+  String drawsTile(String name) {
+    return '$name: سحب قطعة';
+  }
 }

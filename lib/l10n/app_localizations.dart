@@ -385,6 +385,36 @@ abstract class AppLocalizations {
   /// In ar, this message translates to:
   /// **'إعادة التوزيع'**
   String get redeal;
+
+  /// No description provided for @youStartRoundFree.
+  ///
+  /// In ar, this message translates to:
+  /// **'تبدأ الجولة بأي قطعة'**
+  String get youStartRoundFree;
+
+  /// No description provided for @otherStartsRoundFree.
+  ///
+  /// In ar, this message translates to:
+  /// **'{name} يبدأ الجولة'**
+  String otherStartsRoundFree(String name);
+
+  /// No description provided for @saysNoTiles.
+  ///
+  /// In ar, this message translates to:
+  /// **'{name}: ما عندي'**
+  String saysNoTiles(String name);
+
+  /// No description provided for @passesTurn.
+  ///
+  /// In ar, this message translates to:
+  /// **'{name}: عبور'**
+  String passesTurn(String name);
+
+  /// No description provided for @drawsTile.
+  ///
+  /// In ar, this message translates to:
+  /// **'{name}: سحب قطعة'**
+  String drawsTile(String name);
 }
 
 class _AppLocalizationsDelegate

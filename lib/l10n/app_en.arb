@@ -47,5 +47,10 @@
   "nextRound": "Next round",
     "youStartRound": "You start the round with {piece}",
   "otherStartsRound": "{name} starts the round with {piece}",
-  "redeal": "Deal again"
+  "redeal": "Deal again",
+    "youStartRoundFree": "You start the round with any piece",
+  "otherStartsRoundFree": "{name} starts the round",
+  "saysNoTiles": "{name}: I have none",
+  "passesTurn": "{name}: passes",
+  "drawsTile": "{name}: draws a tile"
 }

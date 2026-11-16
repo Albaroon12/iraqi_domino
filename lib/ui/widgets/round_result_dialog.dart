@@ -3,18 +3,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/constants/app_colors.dart';
 import '../../l10n/app_localizations.dart';
 import 'game_button.dart';
+import '../../engine/round_result.dart';
 
-/// How a round ended.
-enum RoundEndKind {
-  /// A player (or team) played all tiles.
-  domino,
 
-  /// Nobody can play; the lowest pip total wins.
-  blocked,
-
-  /// Tie on a block: no points, the round is replayed.
-  burned,
-}
 
 /// Shows the end-of-round dialog. Uses sample data for now; the real
 /// values will come from the game engine in Phase 4.

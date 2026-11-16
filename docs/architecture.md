@@ -31,6 +31,10 @@ Status: DRAFT v0.1
   persisted with shared_preferences (small key/value data only). Storage is
   injected via sharedPreferencesProvider so tests use a fake one. Invalid
   saved values fall back to defaults.
+- engine/ now holds Board (line of play, end matching, orientation),
+  RoundState (turns, legal moves, pass/draw, domino/blocked/burned) and
+  RoundResult. RoundState is a PROTOTYPE (mutable); Phase 4 completes it
+  and tests it fully against game_rules.md.
 
 ## Proposed Folder Structure
 lib/
