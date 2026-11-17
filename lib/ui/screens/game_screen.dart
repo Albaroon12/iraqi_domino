@@ -22,6 +22,7 @@ import '../../state/settings_provider.dart';
 import '../widgets/player_chip.dart';
 import '../widgets/round_result_dialog.dart';
 import '../widgets/score_board.dart';
+import '../../rendering/board_view.dart';
 
 /// The game screen (PROTOTYPE, Phase 3).
 ///
@@ -31,11 +32,8 @@ import '../widgets/score_board.dart';
 ///
 /// The match rules come from [rules] and never from the global settings.
 class GameScreen extends ConsumerStatefulWidget {
-  const GameScreen({
-    super.key,
-    required this.playerCount,
-    required this.rules,
-  }) : assert(playerCount == 2 || playerCount == 4);
+  const GameScreen({super.key, required this.playerCount, required this.rules})
+    : assert(playerCount == 2 || playerCount == 4);
 
   final int playerCount;
   final GameRulesConfig rules;
@@ -53,9 +51,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   static const Duration _drawDelay = Duration(milliseconds: 700);
   static const Duration _passDelay = Duration(milliseconds: 1300);
   static const Duration _resultDelay = Duration(milliseconds: 700);
-
-  /// Short side of the tiles lying on the table.
-  static const double _boardTileWidth = 30;
 
   /// Short side of the tile that follows your finger while dragging.
   static const double _feedbackWidth = 44;
@@ -104,12 +99,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   RoundState _roundFromSetup(RoundSetup setup) => RoundState(
-        playerCount: widget.playerCount,
-        hands: setup.hands,
-        boneyard: setup.boneyard,
-        startSeat: setup.startSeat,
-        openingPiece: setup.startPiece,
-      );
+    playerCount: widget.playerCount,
+    hands: setup.hands,
+    boneyard: setup.boneyard,
+    startSeat: setup.startSeat,
+    openingPiece: setup.startPiece,
+  );
 
   // ---------------------------------------------------------------------
   // Game flow
@@ -251,9 +246,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _myMoves.any((move) => move.piece == piece);
 
   List<BoardEnd> _endsFor(DominoPiece piece) => [
-        for (final move in _myMoves)
-          if (move.piece == piece) move.end,
-      ];
+    for (final move in _myMoves)
+      if (move.piece == piece) move.end,
+  ];
 
   void _playMine(DominoPiece piece, BoardEnd end) {
     final move = Move(piece, end);
@@ -312,8 +307,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     final end = (hover != null && ends.contains(hover))
         ? hover
         : (ends.length == 1
-            ? ends.first
-            : _nearestEnd(_dragPoint(details), ends));
+              ? ends.first
+              : _nearestEnd(_dragPoint(details), ends));
     _playMine(details.data, end);
   }
 
@@ -359,14 +354,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   String _startMessage(AppLocalizations l10n) {
-    final open = _round.openingPiece;
     final seat = _round.startSeat;
-    if (open != null) {
-      final piece = '${open.low}-${open.high}';
-      return seat == 0
-          ? l10n.youStartRound(piece)
-          : l10n.otherStartsRound(_seatName(l10n, seat), piece);
-    }
     return seat == 0
         ? l10n.youStartRoundFree
         : l10n.otherStartsRoundFree(_seatName(l10n, seat));
@@ -445,7 +433,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                   isTurn: _turnSeat == _topSeat,
                 ),
                 const SizedBox(height: 8),
-                HiddenHand(count: topCount, skin: skin, tileWidth: 18),
+                HiddenHand(count: topCount, skin: skin, tileWidth: 12),
               ],
             ),
           ),
@@ -483,7 +471,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         // Center: the line of play, which is also the drop zone.
         Positioned.fill(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: _four ? 118 : 20),
+            padding: EdgeInsets.fromLTRB(_four ? 64 : 10, 96, _four ? 64 : 10, 6),
             child: _buildBoardZone(l10n, skin),
           ),
         ),
@@ -491,11 +479,14 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         // 2 players: how many pieces are left in the draw pile.
         if (!_four)
           Align(
-            alignment: const Alignment(0, 0.65),
+            alignment: Alignment.topLeft,
             child: IgnorePointer(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                margin: const EdgeInsets.fromLTRB(10, 10, 0, 0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xCC1D110A),
                   borderRadius: BorderRadius.circular(20),
@@ -511,9 +502,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-  /// The drop zone: dropping a tile anywhere here plays it on the nearest
-  /// legal end. Dropping outside sends it back to your hand.
-  Widget _buildBoardZone(AppLocalizations l10n, TileSkin skin) {
+    Widget _buildBoardZone(AppLocalizations l10n, TileSkin skin) {
     return Stack(
       children: [
         Positioned.fill(
@@ -524,71 +513,41 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               if (_hoverEnd != null) setState(() => _hoverEnd = null);
             },
             onAcceptWithDetails: _onDrop,
-            builder: (context, candidates, rejected) => SizedBox.expand(
-              child: Center(child: _buildBoard(l10n, skin)),
-            ),
+            builder: (context, candidates, rejected) =>
+                SizedBox.expand(child: _buildBoard(l10n, skin)),
           ),
         ),
         if (_status != null)
           Align(
             alignment: Alignment.bottomCenter,
-            child: IgnorePointer(
-              child: _StatusPill(text: _statusText(l10n)),
-            ),
+            child: IgnorePointer(child: _StatusPill(text: _statusText(l10n))),
           ),
       ],
     );
   }
 
-  /// The line of play with a "slot" on each end that shows where the
-  /// piece will go. The slots always keep their space, so the line does
-  /// not jump when they appear.
-  ///
-  /// PROTOTYPE: the line shrinks to fit the width. The snake layout that
-  /// keeps tiles large comes in step 3.3.
   Widget _buildBoard(AppLocalizations l10n, TileSkin skin) {
-    final line = _round.board.line;
     final ghost = _dragging ?? _selected;
-    final active = ghost == null ? const <BoardEnd>[] : _endsFor(ghost);
-    final vertical = ghost?.isDouble ?? false;
-
-    Widget slot(BoardEnd end, GlobalKey key) => _Slot(
-          key: key,
-          tileWidth: _boardTileWidth,
-          visible: active.contains(end),
-          // Dragging: only the nearest end is lit, the other is faint.
-          // Tap selection: both places are lit so you can tap one.
-          lit: _dragging != null ? _hoverEnd == end : true,
-          vertical: vertical,
-          onTap: _selected == null ? null : () => _playMine(_selected!, end),
-        );
-
-    if (line.isEmpty) {
-      if (ghost != null) return slot(BoardEnd.right, _rightSlotKey);
-      return _BoardPlaceholder(message: _startMessage(l10n));
+    if (_round.board.isEmpty && ghost == null) {
+      return Center(child: _BoardPlaceholder(message: _startMessage(l10n)));
     }
+    final active = ghost == null ? const <BoardEnd>[] : _endsFor(ghost);
+    final hover = _hoverEnd;
+    final selected = _selected;
 
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          slot(BoardEnd.left, _leftSlotKey),
-          for (final placed in line)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: _PlacedTile(
-                placed: placed,
-                width: _boardTileWidth,
-                skin: skin,
-              ),
-            ),
-          slot(BoardEnd.right, _rightSlotKey),
-        ],
-      ),
+    return BoardView(
+      board: _round.board,
+      skin: skin,
+      leftKey: _leftSlotKey,
+      rightKey: _rightSlotKey,
+      ghostDouble: ghost?.isDouble ?? false,
+      activeEnds: active,
+      // Dragging: only the nearest end is lit. Tap selection: all are lit.
+      litEnds: _dragging != null ? {if (hover != null) hover} : active.toSet(),
+      onSlotTap:
+          selected == null ? null : (end) => _playMine(selected, end),
     );
   }
-
   /// The bottom part: your card and your real hand.
   Widget _buildBottomArea(AppLocalizations l10n, TileSkin skin) {
     final myHand = [..._round.hands[0]]..sort();
@@ -729,107 +688,6 @@ class _HandTile extends StatelessWidget {
   }
 }
 
-/// A tile lying on the table, turned along the line of play.
-class _PlacedTile extends StatelessWidget {
-  const _PlacedTile({
-    required this.placed,
-    required this.width,
-    required this.skin,
-  });
-
-  final PlacedPiece placed;
-  final double width;
-  final TileSkin skin;
-
-  @override
-  Widget build(BuildContext context) {
-    // A double stands crosswise (vertical on a horizontal line).
-    if (placed.isDouble) {
-      return DominoTile(
-        top: placed.leftValue,
-        bottom: placed.leftValue,
-        width: width,
-        skin: skin,
-      );
-    }
-    // A horizontal tile is a quarter turn clockwise: its "top" half ends
-    // up on the right and its "bottom" half on the left.
-    return DominoTile(
-      top: placed.rightValue,
-      bottom: placed.leftValue,
-      width: width,
-      horizontal: true,
-      skin: skin,
-    );
-  }
-}
-
-/// The place where the next piece will go, shown as a ghost tile.
-/// Lit (gold, glowing) = this is where the piece will land.
-/// Faint = a possible place, but not the chosen one.
-class _Slot extends StatelessWidget {
-  const _Slot({
-    super.key,
-    required this.tileWidth,
-    required this.visible,
-    required this.lit,
-    required this.vertical,
-    required this.onTap,
-  });
-
-  final double tileWidth;
-  final bool visible;
-  final bool lit;
-  final bool vertical;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final w = tileWidth;
-    final ghostWidth = vertical ? w : w * 2;
-    final ghostHeight = vertical ? w * 2 : w;
-
-    // The outer box has a fixed size, so the line never moves.
-    return SizedBox(
-      width: w * 2 + 4,
-      height: w * 2,
-      child: Center(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: visible ? onTap : null,
-          child: AnimatedOpacity(
-            opacity: visible ? 1 : 0,
-            duration: const Duration(milliseconds: 150),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: ghostWidth,
-              height: ghostHeight,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(w * 0.18),
-                color: lit
-                    ? AppColors.gold.withValues(alpha: 0.35)
-                    : const Color(0x00000000),
-                border: Border.all(
-                  color: AppColors.gold.withValues(alpha: lit ? 1 : 0.45),
-                  width: lit ? 2.5 : 1.5,
-                ),
-                boxShadow: lit
-                    ? [
-                        BoxShadow(
-                          color: AppColors.gold.withValues(alpha: 0.6),
-                          blurRadius: 14,
-                        ),
-                      ]
-                    : const [],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// A side opponent: card on top, a column of face-down tiles below it.
 class _SidePlayer extends StatelessWidget {
   const _SidePlayer({
@@ -851,7 +709,7 @@ class _SidePlayer extends StatelessWidget {
       children: [
         PlayerChip(name: name, tileCount: tileCount, isTurn: isTurn),
         const SizedBox(height: 6),
-        HiddenHand(count: tileCount, skin: skin, tileWidth: 16, vertical: true),
+        HiddenHand(count: tileCount, skin: skin, tileWidth: 12, vertical: true),
       ],
     );
   }

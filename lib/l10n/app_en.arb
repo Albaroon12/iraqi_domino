@@ -52,5 +52,6 @@
   "otherStartsRoundFree": "{name} starts the round",
   "saysNoTiles": "{name}: I have none",
   "passesTurn": "{name}: passes",
-  "drawsTile": "{name}: draws a tile"
+  "drawsTile": "{name}: draws a tile",
+  "youStartRoundFree": "You start the round"
 }

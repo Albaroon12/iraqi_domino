@@ -389,7 +389,7 @@ abstract class AppLocalizations {
   /// No description provided for @youStartRoundFree.
   ///
   /// In ar, this message translates to:
-  /// **'تبدأ الجولة بأي قطعة'**
+  /// **'تبدأ الجولة'**
   String get youStartRoundFree;
 
   /// No description provided for @otherStartsRoundFree.

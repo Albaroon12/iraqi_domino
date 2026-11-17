@@ -40,6 +40,11 @@ class Move {
 class Board {
   final List<PlacedPiece> _line = [];
 
+  int _leftCount = 0;
+
+  /// Index (in [line]) of the first piece played: the center of the layout.
+  int get startIndex => _leftCount;
+
   /// Pieces from the left end to the right end.
   List<PlacedPiece> get line => List.unmodifiable(_line);
 
@@ -80,6 +85,7 @@ class Board {
       final touching = leftEnd!;
       final outer = piece.low == touching ? piece.high : piece.low;
       _line.insert(0, PlacedPiece(piece, outer, touching));
+      _leftCount++;
     }
   }
 }

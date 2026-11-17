@@ -168,7 +168,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get redeal => 'Deal again';
 
   @override
-  String get youStartRoundFree => 'You start the round with any piece';
+  String get youStartRoundFree => 'You start the round';
 
   @override
   String otherStartsRoundFree(String name) {

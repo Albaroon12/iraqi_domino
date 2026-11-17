@@ -135,6 +135,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "youStartRoundFree": "تبدأ الجولة"
 
 }

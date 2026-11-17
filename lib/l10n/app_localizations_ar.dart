@@ -168,7 +168,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get redeal => 'إعادة التوزيع';
 
   @override
-  String get youStartRoundFree => 'تبدأ الجولة بأي قطعة';
+  String get youStartRoundFree => 'تبدأ الجولة';
 
   @override
   String otherStartsRoundFree(String name) {
