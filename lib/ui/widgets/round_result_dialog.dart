@@ -5,8 +5,6 @@ import '../../l10n/app_localizations.dart';
 import 'game_button.dart';
 import '../../engine/round_result.dart';
 
-
-
 /// Shows the end-of-round dialog. Uses sample data for now; the real
 /// values will come from the game engine in Phase 4.
 Future<void> showRoundResultDialog(
@@ -61,8 +59,8 @@ class _RoundResultDialog extends StatelessWidget {
     final icon = burned
         ? Icons.local_fire_department_outlined
         : (weWon
-            ? Icons.emoji_events_outlined
-            : Icons.sentiment_dissatisfied_outlined);
+              ? Icons.emoji_events_outlined
+              : Icons.sentiment_dissatisfied_outlined);
 
     return Dialog(
       backgroundColor: Colors.transparent,

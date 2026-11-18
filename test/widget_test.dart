@@ -11,9 +11,7 @@ void main() {
   });
 
   testWidgets('App starts in the saved language', (tester) async {
-    await tester.pumpWidget(
-      await buildTestApp({'settings.language': 'en'}),
-    );
+    await tester.pumpWidget(await buildTestApp({'settings.language': 'en'}));
     await tester.pumpAndSettle();
 
     expect(find.text('Iraqi Domino'), findsWidgets);

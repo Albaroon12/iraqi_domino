@@ -52,18 +52,18 @@ class BoardView extends StatelessWidget {
         final w = layout.tileWidth;
 
         Widget slot(BoardEnd end, GlobalKey key, LayoutBox b) => Positioned(
-              left: b.left,
-              top: b.top,
-              width: b.width,
-              height: b.height,
-              child: _Slot(
-                key: key,
-                visible: activeEnds.contains(end),
-                lit: litEnds.contains(end),
-                radius: w * 0.18,
-                onTap: onSlotTap == null ? null : () => onSlotTap!(end),
-              ),
-            );
+          left: b.left,
+          top: b.top,
+          width: b.width,
+          height: b.height,
+          child: _Slot(
+            key: key,
+            visible: activeEnds.contains(end),
+            lit: litEnds.contains(end),
+            radius: w * 0.18,
+            onTap: onSlotTap == null ? null : () => onSlotTap!(end),
+          ),
+        );
 
         return Stack(
           clipBehavior: Clip.none,
@@ -79,20 +79,20 @@ class BoardView extends StatelessWidget {
   }
 
   Widget _tile(LaidTile t, double w) {
-    // A double stands crosswise (vertical on the horizontal line).
-    if (t.isDouble) {
+    // Vertical box: no rotation, the first value is the top half.
+    if (t.isVertical) {
       return DominoTile(
-        top: t.leftValue,
-        bottom: t.rightValue,
+        top: t.firstValue,
+        bottom: t.secondValue,
         width: w,
         skin: skin,
       );
     }
-    // A horizontal tile is turned clockwise: its "top" half ends up on the
-    // right and its "bottom" half on the left.
+    // Horizontal box: the tile is turned clockwise, so its "top" half ends
+    // up on the right and its "bottom" half on the left.
     return DominoTile(
-      top: t.rightValue,
-      bottom: t.leftValue,
+      top: t.secondValue,
+      bottom: t.firstValue,
       width: w,
       horizontal: true,
       skin: skin,
@@ -101,6 +101,10 @@ class BoardView extends StatelessWidget {
 }
 
 /// A ghost place: bright gold = the piece will land here; faint = possible.
+///
+/// It appears with a short fade but disappears INSTANTLY. Otherwise, after
+/// a piece is played, the ghost would fade out at its new position and show
+/// as a quick flash.
 class _Slot extends StatelessWidget {
   const _Slot({
     super.key,
@@ -117,6 +121,8 @@ class _Slot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fade = visible ? const Duration(milliseconds: 150) : Duration.zero;
+
     return IgnorePointer(
       ignoring: !visible,
       child: GestureDetector(
@@ -124,9 +130,9 @@ class _Slot extends StatelessWidget {
         onTap: onTap,
         child: AnimatedOpacity(
           opacity: visible ? 1 : 0,
-          duration: const Duration(milliseconds: 150),
+          duration: fade,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+            duration: fade,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               color: lit

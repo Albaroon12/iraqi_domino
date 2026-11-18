@@ -4,6 +4,9 @@ import '../../core/constants/app_colors.dart';
 
 /// Compact player marker: a small avatar with a tile-count badge and the
 /// name below it. The avatar glows gold when it is the player's turn.
+///
+/// When [secondsLeft] is given, a ring counts the turn time down around the
+/// avatar; in the last 10 seconds it turns red and shows the number.
 class PlayerChip extends StatelessWidget {
   const PlayerChip({
     super.key,
@@ -11,15 +14,23 @@ class PlayerChip extends StatelessWidget {
     required this.tileCount,
     required this.isTurn,
     this.icon = Icons.person_rounded,
+    this.secondsLeft,
+    this.secondsTotal = 30,
   });
 
   final String name;
   final int tileCount;
   final bool isTurn;
   final IconData icon;
+  final int? secondsLeft;
+  final int secondsTotal;
 
   @override
   Widget build(BuildContext context) {
+    final left = secondsLeft;
+    final urgent = left != null && left <= 10;
+    const urgentColor = Color(0xFFE5533D);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -49,8 +60,39 @@ class PlayerChip extends StatelessWidget {
                       ]
                     : const [],
               ),
-              child: Icon(icon, size: 20, color: AppColors.ivory),
+              child: urgent
+                  ? Text(
+                      '$left',
+                      style: const TextStyle(
+                        color: urgentColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        height: 1,
+                      ),
+                    )
+                  : Icon(icon, size: 20, color: AppColors.ivory),
             ),
+            // Turn timer ring.
+            if (left != null)
+              Positioned(
+                left: -5,
+                top: -5,
+                right: -5,
+                bottom: -5,
+                child: IgnorePointer(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: left / secondsTotal),
+                    duration: const Duration(milliseconds: 1000),
+                    curve: Curves.linear,
+                    builder: (context, value, _) => CircularProgressIndicator(
+                      value: value,
+                      strokeWidth: 3,
+                      color: urgent ? urgentColor : AppColors.gold,
+                      backgroundColor: const Color(0x33FFFFFF),
+                    ),
+                  ),
+                ),
+              ),
             // Tile count badge.
             Positioned(
               right: -7,

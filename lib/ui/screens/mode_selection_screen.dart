@@ -12,7 +12,7 @@ import 'game_screen.dart';
 class ModeSelectionScreen extends ConsumerWidget {
   const ModeSelectionScreen({super.key});
 
-    void _openGame(BuildContext context, int playerCount, int targetScore) {
+  void _openGame(BuildContext context, int playerCount, int targetScore) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => GameScreen(
@@ -50,7 +50,7 @@ class ModeSelectionScreen extends ConsumerWidget {
                         subtitle: '${l10n.modeTwoPlayersDesc}\n$targetText',
                         icon: Icons.person_outline,
                         primary: true,
-                        onPressed: () => _openGame(context, 2 , targetScore),
+                        onPressed: () => _openGame(context, 2, targetScore),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -61,7 +61,7 @@ class ModeSelectionScreen extends ConsumerWidget {
                         subtitle: '${l10n.modeFourPlayersDesc}\n$targetText',
                         icon: Icons.groups_outlined,
                         primary: true,
-                        onPressed: () => _openGame(context, 4 , targetScore),
+                        onPressed: () => _openGame(context, 4, targetScore),
                       ),
                     ),
                     const SizedBox(height: 14),

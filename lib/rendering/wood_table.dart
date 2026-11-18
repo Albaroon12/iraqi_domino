@@ -5,11 +5,7 @@ import 'wood_table_painter.dart';
 
 /// A wooden table that fills its parent. Put game content in [child].
 class WoodTable extends StatelessWidget {
-  const WoodTable({
-    super.key,
-    this.skin = TableSkin.walnut,
-    this.child,
-  });
+  const WoodTable({super.key, this.skin = TableSkin.walnut, this.child});
 
   final TableSkin skin;
   final Widget? child;

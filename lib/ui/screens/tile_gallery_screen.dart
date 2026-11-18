@@ -25,10 +25,10 @@ class _TileGalleryScreenState extends State<TileGalleryScreen> {
   ];
 
   String _skinName(AppLocalizations l10n, TileSkin skin) => switch (skin.id) {
-        'ebony' => l10n.skinEbony,
-        'ruby' => l10n.skinRuby,
-        _ => l10n.skinIvory,
-      };
+    'ebony' => l10n.skinEbony,
+    'ruby' => l10n.skinRuby,
+    _ => l10n.skinIvory,
+  };
 
   @override
   Widget build(BuildContext context) {

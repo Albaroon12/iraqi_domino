@@ -29,16 +29,13 @@ class HiddenHand extends StatelessWidget {
 
     for (var i = 0; i < count; i++) {
       if (i > 0) {
-        children.add(SizedBox(
-          width: vertical ? 0 : gap,
-          height: vertical ? gap : 0,
-        ));
+        children.add(
+          SizedBox(width: vertical ? 0 : gap, height: vertical ? gap : 0),
+        );
       }
-      children.add(DominoBack(
-        width: tileWidth,
-        horizontal: vertical,
-        skin: skin,
-      ));
+      children.add(
+        DominoBack(width: tileWidth, horizontal: vertical, skin: skin),
+      );
     }
 
     return Flex(

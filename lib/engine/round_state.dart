@@ -16,12 +16,12 @@ class RoundState {
     required List<DominoPiece> boneyard,
     required this.startSeat,
     this.openingPiece,
-  })  : assert(playerCount == 2 || playerCount == 4),
-        hands = [
-          for (final hand in hands) [...hand],
-        ],
-        boneyard = [...boneyard],
-        turn = startSeat;
+  }) : assert(playerCount == 2 || playerCount == 4),
+       hands = [
+         for (final hand in hands) [...hand],
+       ],
+       boneyard = [...boneyard],
+       turn = startSeat;
 
   final int playerCount;
   final List<List<DominoPiece>> hands;

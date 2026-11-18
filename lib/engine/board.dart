@@ -39,6 +39,7 @@ class Move {
 /// Pure Dart: no Flutter imports.
 class Board {
   final List<PlacedPiece> _line = [];
+  final List<BoardEnd> _history = [];
 
   int _leftCount = 0;
 
@@ -47,6 +48,11 @@ class Board {
 
   /// Pieces from the left end to the right end.
   List<PlacedPiece> get line => List.unmodifiable(_line);
+
+  /// The end used by every placement, in the order the pieces were played.
+  /// The first entry is the opening piece (always [BoardEnd.right]).
+  /// The layout replays this order so a piece never moves once placed.
+  List<BoardEnd> get history => List.unmodifiable(_history);
 
   bool get isEmpty => _line.isEmpty;
 
@@ -71,6 +77,8 @@ class Board {
     if (!endsFor(piece).contains(end)) {
       throw ArgumentError('$piece cannot be played on ${end.name}');
     }
+
+    _history.add(end);
 
     if (isEmpty) {
       _line.add(PlacedPiece(piece, piece.low, piece.high));

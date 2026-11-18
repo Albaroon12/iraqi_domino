@@ -8,12 +8,12 @@ const _sixSix = Move(DominoPiece(6, 6), BoardEnd.right);
 
 /// A four-player round where seat 0 opens with 6-6.
 RoundState _fourPlayers(List<List<DominoPiece>> hands) => RoundState(
-      playerCount: 4,
-      hands: hands,
-      boneyard: const [],
-      startSeat: 0,
-      openingPiece: const DominoPiece(6, 6),
-    );
+  playerCount: 4,
+  hands: hands,
+  boneyard: const [],
+  startSeat: 0,
+  openingPiece: const DominoPiece(6, 6),
+);
 
 void main() {
   test('the opening move is limited to the opening piece', () {
@@ -123,40 +123,42 @@ void main() {
     expect(round.result!.winnerTeam, isNull);
   });
 
-  test('blocked: a tie inside one team wins; the closest to the blocker starts',
-      () {
-    final round = _fourPlayers(const [
-      [DominoPiece(6, 6), DominoPiece(0, 4)], // 4
-      [DominoPiece(6, 1), DominoPiece(3, 3)], // plays 6-1, keeps 6
-      [DominoPiece(2, 2)], // 4
-      [DominoPiece(3, 4)], // 7
-    ]);
+  test(
+    'blocked: a tie inside one team wins; the closest to the blocker starts',
+    () {
+      final round = _fourPlayers(const [
+        [DominoPiece(6, 6), DominoPiece(0, 4)], // 4
+        [DominoPiece(1, 6), DominoPiece(3, 3)], // plays 6-1, keeps 6
+        [DominoPiece(2, 2)], // 4
+        [DominoPiece(3, 4)], // 7
+      ]);
 
-    round.play(_sixSix); // seat 0
-    round.play(const Move(DominoPiece(1, 6), BoardEnd.right)); // seat 1
-    for (var i = 0; i < 4; i++) {
-      round.pass(); // seats 2, 3, 0, 1
-    }
+      round.play(_sixSix); // seat 0
+      round.play(const Move(DominoPiece(1, 6), BoardEnd.right)); // seat 1
+      for (var i = 0; i < 4; i++) {
+        round.pass(); // seats 2, 3, 0, 1
+      }
 
-    // Lowest: seats 0 and 2 (both 4), same team. The blocker is seat 1,
-    // so seat 2 is the closest in play order.
-    expect(round.result!.kind, RoundEndKind.blocked);
-    expect(round.result!.winnerTeam, 0);
-    expect(round.result!.winnerSeat, 2);
-    expect(round.result!.points, 13); // seats 1 and 3: 6 + 7
-  });
+      // Lowest: seats 0 and 2 (both 4), same team. The blocker is seat 1,
+      // so seat 2 is the closest in play order.
+      expect(round.result!.kind, RoundEndKind.blocked);
+      expect(round.result!.winnerTeam, 0);
+      expect(round.result!.winnerSeat, 2);
+      expect(round.result!.points, 13); // seats 1 and 3: 6 + 7
+    },
+  );
 
   group('two players', () {
     RoundState twoPlayers() => RoundState(
-          playerCount: 2,
-          hands: const [
-            [DominoPiece(6, 6), DominoPiece(0, 1)],
-            [DominoPiece(2, 3)],
-          ],
-          boneyard: const [DominoPiece(4, 5), DominoPiece(1, 6)],
-          startSeat: 0,
-          openingPiece: const DominoPiece(6, 6),
-        );
+      playerCount: 2,
+      hands: const [
+        [DominoPiece(6, 6), DominoPiece(0, 1)],
+        [DominoPiece(2, 3)],
+      ],
+      boneyard: const [DominoPiece(4, 5), DominoPiece(1, 6)],
+      startSeat: 0,
+      openingPiece: const DominoPiece(6, 6),
+    );
 
     test('a player with no move must draw before passing', () {
       final round = twoPlayers()..play(_sixSix);

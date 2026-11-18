@@ -42,8 +42,12 @@ class WoodTablePainter extends CustomPainter {
     final plankWidth = size.width / _planks;
 
     for (var i = 0; i < _planks; i++) {
-      final plankRect =
-          Rect.fromLTWH(i * plankWidth, 0, plankWidth, size.height);
+      final plankRect = Rect.fromLTWH(
+        i * plankWidth,
+        0,
+        plankWidth,
+        size.height,
+      );
       canvas.drawRect(
         plankRect,
         Paint()..color = Color.fromRGBO(0, 0, 0, rnd.nextDouble() * 0.12),
@@ -139,6 +143,5 @@ class WoodTablePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WoodTablePainter oldDelegate) =>
-      oldDelegate.skin != skin;
+  bool shouldRepaint(WoodTablePainter oldDelegate) => oldDelegate.skin != skin;
 }

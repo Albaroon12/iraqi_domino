@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kReleaseMode;
-import 'package:flutter/rendering.dart' show RenderBox;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -14,6 +13,7 @@ import '../../engine/game_rules_config.dart';
 import '../../engine/round_result.dart';
 import '../../engine/round_state.dart';
 import '../../l10n/app_localizations.dart';
+import '../../rendering/board_view.dart';
 import '../../rendering/domino_tile.dart';
 import '../../rendering/hidden_hand.dart';
 import '../../rendering/tile_skin.dart';
@@ -22,7 +22,6 @@ import '../../state/settings_provider.dart';
 import '../widgets/player_chip.dart';
 import '../widgets/round_result_dialog.dart';
 import '../widgets/score_board.dart';
-import '../../rendering/board_view.dart';
 
 /// The game screen (PROTOTYPE, Phase 3).
 ///
@@ -52,6 +51,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   static const Duration _passDelay = Duration(milliseconds: 1300);
   static const Duration _resultDelay = Duration(milliseconds: 700);
 
+  /// Seconds you have for each move. When it runs out, the computer plays
+  /// for you. Use 60 for a slower game.
+  static const int _turnSeconds = 30;
+
   /// Short side of the tile that follows your finger while dragging.
   static const double _feedbackWidth = 44;
 
@@ -70,6 +73,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   final List<int> _scores = [0, 0];
 
   Timer? _timer;
+  Timer? _turnTimer;
+  int _secondsLeft = _turnSeconds;
   ({int seat, _StatusKind kind})? _status;
 
   // Interaction state (your own turn only).
@@ -95,6 +100,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _turnTimer?.cancel();
     super.dispose();
   }
 
@@ -121,6 +127,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   /// Call it inside setState (it only changes fields and starts timers).
   void _advance() {
     _timer?.cancel();
+    _turnTimer?.cancel();
     _myMoves = const [];
 
     if (_round.isOver) {
@@ -149,9 +156,39 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _status = null;
     if (seat == 0) {
       _myMoves = moves;
+      _startTurnTimer();
     } else {
       _schedule(_aiDelay, () => _aiPlay(moves));
     }
+  }
+
+  /// Starts the countdown of your turn.
+  void _startTurnTimer() {
+    _turnTimer?.cancel();
+    _secondsLeft = _turnSeconds;
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _secondsLeft--);
+      if (_secondsLeft <= 0) {
+        timer.cancel();
+        _autoPlayForMe();
+      }
+    });
+  }
+
+  /// Time is up: the computer plays a legal move for you.
+  /// PROTOTYPE: random move. The real AI comes in Phase 5.
+  void _autoPlayForMe() {
+    if (_round.isOver || _round.turn != 0 || _myMoves.isEmpty) return;
+    final move = _myMoves[_random.nextInt(_myMoves.length)];
+    setState(() {
+      _clearInteraction();
+      _round.play(move);
+      _advance();
+    });
   }
 
   /// The current player has no move: draw (two players) or pass.
@@ -355,6 +392,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   String _startMessage(AppLocalizations l10n) {
     final seat = _round.startSeat;
+    final forced = _round.openingPiece;
+    if (forced != null) {
+      return seat == 0
+          ? l10n.youStartRound('$forced')
+          : l10n.otherStartsRound(_seatName(l10n, seat), '$forced');
+    }
     return seat == 0
         ? l10n.youStartRoundFree
         : l10n.otherStartsRoundFree(_seatName(l10n, seat));
@@ -469,9 +512,16 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           ),
 
         // Center: the line of play, which is also the drop zone.
+        // The padding keeps the tiles away from the screen edge and from
+        // the players' cards (top 108, sides 76 with four players).
         Positioned.fill(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(_four ? 64 : 10, 96, _four ? 64 : 10, 6),
+            padding: EdgeInsets.fromLTRB(
+              _four ? 76 : 14,
+              108,
+              _four ? 76 : 14,
+              12,
+            ),
             child: _buildBoardZone(l10n, skin),
           ),
         ),
@@ -502,7 +552,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-    Widget _buildBoardZone(AppLocalizations l10n, TileSkin skin) {
+  Widget _buildBoardZone(AppLocalizations l10n, TileSkin skin) {
     return Stack(
       children: [
         Positioned.fill(
@@ -543,18 +593,19 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       ghostDouble: ghost?.isDouble ?? false,
       activeEnds: active,
       // Dragging: only the nearest end is lit. Tap selection: all are lit.
-      litEnds: _dragging != null ? {if (hover != null) hover} : active.toSet(),
-      onSlotTap:
-          selected == null ? null : (end) => _playMine(selected, end),
+      litEnds: _dragging != null ? {?hover} : active.toSet(),
+      onSlotTap: selected == null ? null : (end) => _playMine(selected, end),
     );
   }
-  /// The bottom part: your card and your real hand.
+
+  /// The bottom part: your card and your hand.
   Widget _buildBottomArea(AppLocalizations l10n, TileSkin skin) {
     final myHand = [..._round.hands[0]]..sort();
     final myTurn = _turnSeat == 0;
+    final timerOn = myTurn && _myMoves.isNotEmpty;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -562,35 +613,50 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             name: l10n.playerYou,
             tileCount: myHand.length,
             isTurn: myTurn,
+            secondsLeft: timerOn ? _secondsLeft : null,
+            secondsTotal: _turnSeconds,
           ),
-          const SizedBox(height: 8),
-          // Size the tiles so the hand fits in at most two rows.
+          const SizedBox(height: 4),
+          // One row that scrolls sideways, so any number of tiles can be
+          // reached. The tile size never changes with the number of tiles.
           LayoutBuilder(
             builder: (context, constraints) {
-              final perRow = math.max(7, (myHand.length / 2).ceil());
-              final tileWidth = math.min(
-                48.0,
-                (constraints.maxWidth - (perRow - 1) * 6) / perRow,
-              );
-              return Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final piece in myHand)
-                    _HandTile(
-                      piece: piece,
-                      width: tileWidth,
-                      feedbackWidth: _feedbackWidth,
-                      skin: skin,
-                      playable: _isPlayable(piece),
-                      dimmed: myTurn && !_isPlayable(piece),
-                      selected: _selected == piece,
-                      onTap: () => _onTapPiece(piece),
-                      onDragStarted: () => _onDragStarted(piece),
-                      onDragEnd: _onDragEnd,
+              final tileWidth = math.min(48.0, (constraints.maxWidth - 68) / 7);
+              return SizedBox(
+                height: tileWidth * 2 + 32,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 18, 12, 14),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final piece in myHand)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                              ),
+                              child: _HandTile(
+                                piece: piece,
+                                width: tileWidth,
+                                feedbackWidth: _feedbackWidth,
+                                skin: skin,
+                                playable: _isPlayable(piece),
+                                dimmed: myTurn && !_isPlayable(piece),
+                                selected: _selected == piece,
+                                onTap: () => _onTapPiece(piece),
+                                onDragStarted: () => _onDragStarted(piece),
+                                onDragEnd: _onDragEnd,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                ],
+                  ),
+                ),
               );
             },
           ),
@@ -601,7 +667,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 }
 
 /// One tile of your hand. Playable tiles glow gold and can be tapped or
-/// dragged; the others fade (only while it is your turn).
+/// dragged up to the table; the others fade (only while it is your turn).
 class _HandTile extends StatelessWidget {
   const _HandTile({
     required this.piece,
@@ -670,13 +736,17 @@ class _HandTile extends StatelessWidget {
     return Draggable<DominoPiece>(
       data: piece,
       maxSimultaneousDrags: 1,
+      // Only an upward/downward drag starts the drag-and-drop, so a
+      // sideways swipe still scrolls the hand.
+      affinity: Axis.vertical,
       feedback: DominoTile(
         top: piece.low,
         bottom: piece.high,
         width: feedbackWidth,
         skin: skin,
       ),
-      childWhenDragging: Opacity(opacity: 0.25, child: tile),
+      // The place stays EMPTY while the tile is in your finger.
+      childWhenDragging: SizedBox(width: width, height: width * 2),
       onDragStarted: onDragStarted,
       onDragEnd: (_) => onDragEnd(),
       child: GestureDetector(

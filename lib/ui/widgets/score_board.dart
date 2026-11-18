@@ -35,7 +35,9 @@ class ScoreBoard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(child: _ScoreCell(label: ourLabel, score: ourScore)),
+          Expanded(
+            child: _ScoreCell(label: ourLabel, score: ourScore),
+          ),
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -56,7 +58,9 @@ class ScoreBoard extends StatelessWidget {
               ),
             ],
           ),
-          Expanded(child: _ScoreCell(label: theirLabel, score: theirScore)),
+          Expanded(
+            child: _ScoreCell(label: theirLabel, score: theirScore),
+          ),
         ],
       ),
     );

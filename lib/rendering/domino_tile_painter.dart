@@ -24,15 +24,14 @@ class DominoTilePainter extends CustomPainter {
     2: [Offset(0, 0), Offset(2, 2)],
     3: [Offset(0, 0), Offset(1, 1), Offset(2, 2)],
     4: [Offset(0, 0), Offset(2, 0), Offset(0, 2), Offset(2, 2)],
-    5: [
-      Offset(0, 0), Offset(2, 0),
-      Offset(1, 1),
-      Offset(0, 2), Offset(2, 2),
-    ],
+    5: [Offset(0, 0), Offset(2, 0), Offset(1, 1), Offset(0, 2), Offset(2, 2)],
     6: [
-      Offset(0, 0), Offset(2, 0),
-      Offset(0, 1), Offset(2, 1),
-      Offset(0, 2), Offset(2, 2),
+      Offset(0, 0),
+      Offset(2, 0),
+      Offset(0, 1),
+      Offset(2, 1),
+      Offset(0, 2),
+      Offset(2, 2),
     ],
   };
 

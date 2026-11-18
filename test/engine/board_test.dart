@@ -38,8 +38,10 @@ void main() {
   test('endsFor lists the ends where a piece matches', () {
     final board = Board()..place(const DominoPiece(3, 5), BoardEnd.right);
 
-    expect(board.endsFor(const DominoPiece(3, 5)),
-        [BoardEnd.left, BoardEnd.right]);
+    expect(board.endsFor(const DominoPiece(3, 5)), [
+      BoardEnd.left,
+      BoardEnd.right,
+    ]);
     expect(board.endsFor(const DominoPiece(3, 6)), [BoardEnd.left]);
     expect(board.endsFor(const DominoPiece(5, 6)), [BoardEnd.right]);
     expect(board.endsFor(const DominoPiece(0, 1)), isEmpty);

@@ -16,9 +16,7 @@ class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
 
   void _open(BuildContext context, Widget screen) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => screen),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override
@@ -83,8 +81,7 @@ class MainMenuScreen extends StatelessWidget {
                       child: GameButton(
                         label: l10n.settings,
                         icon: Icons.settings_outlined,
-                        onPressed: () =>
-                            _open(context, const SettingsScreen()),
+                        onPressed: () => _open(context, const SettingsScreen()),
                       ),
                     ),
                     // Developer shortcuts: visible only in debug runs.

@@ -5,7 +5,7 @@ class DominoPiece implements Comparable<DominoPiece> {
   /// [low] must be <= [high], so every piece has exactly one representation
   /// (there is no separate "5-2" and "2-5").
   const DominoPiece(this.low, this.high)
-      : assert(low >= 0 && high <= 6 && low <= high);
+    : assert(low >= 0 && high <= 6 && low <= high);
 
   final int low;
   final int high;
@@ -20,9 +20,9 @@ class DominoPiece implements Comparable<DominoPiece> {
 
   /// The 28 pieces of the double-six set: 0-0, 0-1 ... 6-6.
   static List<DominoPiece> fullSet() => [
-        for (var a = 0; a <= 6; a++)
-          for (var b = a; b <= 6; b++) DominoPiece(a, b),
-      ];
+    for (var a = 0; a <= 6; a++)
+      for (var b = a; b <= 6; b++) DominoPiece(a, b),
+  ];
 
   @override
   bool operator ==(Object other) =>

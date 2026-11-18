@@ -21,7 +21,13 @@ class _TablePreviewScreenState extends State<TablePreviewScreen> {
 
   /// Sample hand of seven tiles.
   static const List<(int, int)> _hand = [
-    (0, 1), (2, 3), (4, 4), (1, 6), (5, 2), (3, 3), (6, 0),
+    (0, 1),
+    (2, 3),
+    (4, 4),
+    (1, 6),
+    (5, 2),
+    (3, 3),
+    (6, 0),
   ];
 
   @override
@@ -46,8 +52,10 @@ class _TablePreviewScreenState extends State<TablePreviewScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             // Size the hand so seven tiles always fit the screen width.
-            final handTileWidth =
-                math.min(48.0, (constraints.maxWidth - 48 - 6 * 6) / 7);
+            final handTileWidth = math.min(
+              48.0,
+              (constraints.maxWidth - 48 - 6 * 6) / 7,
+            );
             const lineTileWidth = 36.0;
 
             return Column(
@@ -60,22 +68,34 @@ class _TablePreviewScreenState extends State<TablePreviewScreen> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         DominoTile(
-                          top: 2, bottom: 4, width: lineTileWidth,
-                          horizontal: true, skin: skin,
+                          top: 2,
+                          bottom: 4,
+                          width: lineTileWidth,
+                          horizontal: true,
+                          skin: skin,
                         ),
                         const SizedBox(width: 2),
                         DominoTile(
-                          top: 6, bottom: 2, width: lineTileWidth,
-                          horizontal: true, skin: skin,
+                          top: 6,
+                          bottom: 2,
+                          width: lineTileWidth,
+                          horizontal: true,
+                          skin: skin,
                         ),
                         const SizedBox(width: 2),
                         DominoTile(
-                          top: 6, bottom: 6, width: lineTileWidth, skin: skin,
+                          top: 6,
+                          bottom: 6,
+                          width: lineTileWidth,
+                          skin: skin,
                         ),
                         const SizedBox(width: 2),
                         DominoTile(
-                          top: 3, bottom: 6, width: lineTileWidth,
-                          horizontal: true, skin: skin,
+                          top: 3,
+                          bottom: 6,
+                          width: lineTileWidth,
+                          horizontal: true,
+                          skin: skin,
                         ),
                       ],
                     ),
@@ -90,7 +110,10 @@ class _TablePreviewScreenState extends State<TablePreviewScreen> {
                     children: [
                       for (final (a, b) in _hand)
                         DominoTile(
-                          top: a, bottom: b, width: handTileWidth, skin: skin,
+                          top: a,
+                          bottom: b,
+                          width: handTileWidth,
+                          skin: skin,
                         ),
                     ],
                   ),

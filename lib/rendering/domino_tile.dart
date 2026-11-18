@@ -15,8 +15,8 @@ class DominoTile extends StatelessWidget {
     this.width = 48,
     this.horizontal = false,
     this.skin = TileSkin.ivory,
-  })  : assert(top >= 0 && top <= 6),
-        assert(bottom >= 0 && bottom <= 6);
+  }) : assert(top >= 0 && top <= 6),
+       assert(bottom >= 0 && bottom <= 6);
 
   final int top;
   final int bottom;
