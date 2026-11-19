@@ -262,6 +262,93 @@ void main() {
     _check(layout, 215, 215);
   });
 
+  test('a double right after a turn stands vertically in the new column', () {
+    // Build a lower-arm chain until it makes its first horizontal turn,
+    // then play a double matching the open end.
+    final board = Board()..place(const DominoPiece(6, 6), BoardEnd.right);
+    const chain = [
+      DominoPiece(5, 6),
+      DominoPiece(4, 5),
+      DominoPiece(3, 4),
+      DominoPiece(2, 3),
+      DominoPiece(1, 2),
+      DominoPiece(0, 1),
+    ];
+    for (final p in chain) {
+      board.place(p, BoardEnd.right);
+      final soFar = SerpentineLayout.fit(board, 215, 215);
+      if (!soFar.tiles.last.isVertical) break;
+    }
+
+    final turnTile = SerpentineLayout.fit(board, 215, 215).tiles.last;
+    expect(turnTile.isVertical, isFalse);
+
+    final open = board.rightEnd!;
+    board.place(DominoPiece(open, open), BoardEnd.right);
+    final layout = SerpentineLayout.fit(board, 215, 215);
+    final doubleTile = layout.tiles.last;
+
+    expect(layout.overflow, isFalse);
+    expect(doubleTile.isDouble, isTrue);
+    expect(doubleTile.isVertical, isTrue);
+    // Aligned flush with the outer (left) edge of the turn piece.
+    expect(doubleTile.box.left, closeTo(turnTile.box.left, .01));
+    _check(layout, 215, 215);
+  });
+
+  test('a double near a side wall stands vertically instead of overflowing', () {
+    // Pick a width where column 2 (after turning left from center) has room
+    // for a vertical tile (w) on its left, but NOT for a crosswise double (2w).
+    // With w = 20, gap = 2, margin = 4:
+    // center x = 66, col1 left = 56, turn = [14..54], col2 x = 24.
+    // col2 vertical left = 14 (>= 4), col2 crosswise left = 4 -> use width 116:
+    // center x = 58, col1 left = 48, turn = [6..46], col2 x = 16:
+    // col2 vertical = [6..26] (fits), col2 crosswise = [-4..36] (overflows!).
+    const w = 20.0;
+    const width = 116.0;
+    const height = 220.0;
+
+    final board = Board()
+      ..place(const DominoPiece(0, 1), BoardEnd.right)
+      ..place(const DominoPiece(1, 2), BoardEnd.right)
+      ..place(const DominoPiece(2, 3), BoardEnd.right)
+      ..place(const DominoPiece(3, 4), BoardEnd.right) // turns left
+      ..place(const DominoPiece(4, 5), BoardEnd.right) // vertical up in col 2
+      ..place(const DominoPiece(5, 5), BoardEnd.right); // double in col 2
+
+    final layout = SerpentineLayout.compute(board, width, height, w);
+    final doubleTile = layout.tiles.last;
+
+    expect(layout.overflow, isFalse);
+    expect(doubleTile.isDouble, isTrue);
+    expect(doubleTile.isVertical, isTrue);
+    _check(layout, width, height);
+  });
+
+  test('a double at the end of a column turns instead of overflowing', () {
+    // With w = 20, gap = 2, height = 136:
+    // center [48..88], next [90..130]. Remaining below = 6 < w (20), so a
+    // double cannot fit straight down and must turn left cleanly.
+    const w = 20.0;
+    const width = 200.0;
+    const height = 136.0;
+
+    final board = Board()
+      ..place(const DominoPiece(0, 1), BoardEnd.right)
+      ..place(const DominoPiece(1, 2), BoardEnd.right)
+      ..place(const DominoPiece(2, 2), BoardEnd.right)
+      ..place(const DominoPiece(2, 3), BoardEnd.right);
+
+    final layout = SerpentineLayout.compute(board, width, height, w);
+    final doubleTile = layout.tiles[2];
+
+    expect(layout.overflow, isFalse);
+    expect(doubleTile.isDouble, isTrue);
+    expect(doubleTile.isVertical, isFalse);
+    expect(doubleTile.box.right, lessThan(width / 2));
+    _check(layout, width, height);
+  });
+
   for (final cfg in [
     (4, 179.0, 179.0),
     (2, 215.0, 215.0),

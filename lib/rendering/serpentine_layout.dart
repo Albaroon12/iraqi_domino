@@ -34,6 +34,10 @@ class _Arm {
 
   /// Box of the last piece placed on this arm.
   LayoutBox last;
+
+  /// True when [last] was a horizontal turn piece (the next piece starts a
+  /// new column from its outer half).
+  bool afterTurn = false;
 }
 
 /// The serpentine layout of the line of play. Pure Dart.
@@ -48,6 +52,10 @@ class _Arm {
 ///   or below that horizontal piece, one tile-width away from the old
 ///   column, and runs the opposite way (down becomes up, up becomes down).
 /// - A double lies crosswise to the line and never turns.
+/// - A double lies crosswise in a column when it fits cleanly; right after a
+///   turn or near a side wall where crosswise does not fit, it stands
+///   vertically (lengthwise) inside the column like a normal piece, and if it
+///   cannot fit straight at the end of a column it turns cleanly.
 /// - The two arms are independent, so a placed piece never moves.
 class SerpentineLayout {
   const SerpentineLayout({
@@ -251,15 +259,48 @@ class SerpentineLayout {
     final len = isDouble ? w : 2 * w;
     final thick = isDouble ? 2 * w : w;
     final m = isDouble ? doubleMargin : margin;
+    if (isDouble) {
+      // Crosswise (horizontal) in the column, except right after a turn
+      // (where it would overhang the inner half of the turn piece).
+      if (!a.afterTurn) {
+        final top = a.dir > 0 ? a.edge + gap : a.edge - gap - w;
+        final cross = LayoutBox(a.x - w, top, 2 * w, w);
+        if (_within(cross, doubleMargin, width, height)) {
+          a.edge = a.dir > 0 ? cross.bottom : cross.top;
+          a.last = cross;
+          a.afterTurn = false;
+          return _Placed(cross, a.dir > 0 ? _Dir.down : _Dir.up);
+        }
+      }
 
     // Straight on, in the same column.
     final top = a.dir > 0 ? a.edge + gap : a.edge - gap - len;
     final straight = LayoutBox(a.x - thick / 2, top, thick, len);
+      // Lengthwise (vertical) in the column when crosswise does not fit
+      // (e.g. right after a turn or near a side edge).
+      final top = a.dir > 0 ? a.edge + gap : a.edge - gap - 2 * w;
+      final vertical = LayoutBox(a.x - w / 2, top, w, 2 * w);
+      if (_within(vertical, margin, width, height)) {
+        a.edge = a.dir > 0 ? vertical.bottom : vertical.top;
+        a.last = vertical;
+        a.afterTurn = false;
+        return _Placed(vertical, a.dir > 0 ? _Dir.down : _Dir.up);
+      }
+    } else {
+      // Straight on, in the same column.
+      final top = a.dir > 0 ? a.edge + gap : a.edge - gap - 2 * w;
+      final straight = LayoutBox(a.x - w / 2, top, w, 2 * w);
 
     if (_within(straight, m, width, height) || (isDouble && force)) {
       a.edge = a.dir > 0 ? straight.bottom : straight.top;
       a.last = straight;
       return _Placed(straight, a.dir > 0 ? _Dir.down : _Dir.up);
+      if (_within(straight, margin, width, height)) {
+        a.edge = a.dir > 0 ? straight.bottom : straight.top;
+        a.last = straight;
+        a.afterTurn = false;
+        return _Placed(straight, a.dir > 0 ? _Dir.down : _Dir.up);
+      }
     }
 
     // A double NEVER turns.
@@ -281,6 +322,7 @@ class SerpentineLayout {
     a.dir = -a.dir;
     a.edge = a.dir > 0 ? turn.bottom : turn.top;
     a.last = turn;
+    a.afterTurn = true;
     return _Placed(turn, a.sign < 0 ? _Dir.left : _Dir.right);
   }
 }

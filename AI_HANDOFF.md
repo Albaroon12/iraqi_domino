@@ -89,7 +89,7 @@ Roadmap source: `docs/roadmap.md`.
 | R2 | Pure-Dart `SerpentineLayout`: FIXED tile size from the area, serpentine columns, tests | DONE 2026-11-19 (NOT RUN: analyze/test) |
 | R3 | Remove old `BoardLayout` (kept only `LayoutBox`/`LaidTile`), delete its test, `minArmTiles` 14 -> 12 (bigger tiles) | DONE 2026-11-19 (NOT RUN: analyze/test) |
 polish ghost slots/drop zone; decide tile size (Q-5) | PARTIAL |
-| R4 | Doubles and corner alignment polish (fixes the misalignment seen in screenshot 4), if the visual check shows problems | TODO |
+| R4 | Doubles and corner alignment polish (fixes the misalignment seen in screenshot 4), if the visual check shows problems | DONE 2026-11-19 (doubles stand vertical after turns / near side walls, turn cleanly at column ends) |
 | R5 | Hand tiles and drag feedback at the same size as on the table; clearer gold ghost slots | TODO |
 | R6 | Update tests, `docs/architecture.md`, and this file | TODO |
 
@@ -97,7 +97,7 @@ polish ghost slots/drop zone; decide tile size (Q-5) | PARTIAL |
 - Tile size is fixed: `tileWidthFor(width, height)` depends only on the area. It picks the biggest width (26 down to 8 px) where each arm holds at least `minArmTiles` (12) normal pieces. About 16 px on a 179 px felt (checked with a Python port of the algorithm, not with Dart).
 - First piece: vertical in the center (a double lies crosswise). Right end = lower arm (goes down, turns LEFT). Left end = upper arm (goes up, turns RIGHT).
 - When the next normal piece does not fit in the column, a horizontal piece is placed BESIDE the last half of the last piece (beside the head of a double). The next column goes through the outer half of that turn piece, so columns are about 2w + gap apart, and it runs the opposite way (down becomes up, up becomes down).
-- A double lies crosswise and never turns. A piece after a double turns from the double's head.
+- A double lies crosswise in a column when it fits cleanly; right after a turn (`afterTurn`) or near a side edge where crosswise does not fit, it stands vertically (lengthwise) inside the column like a normal piece; if it cannot fit straight at the end of a column, it turns cleanly instead of overflowing.
 - The two arms are independent, so a placed piece never moves (only the tile size, which depends on the area, would move everything).
 - If an arm is completely full, extra pieces are placed outside the area and `overflow` is true (rare; tests skip such layouts).
 
@@ -253,6 +253,21 @@ Format: `- [OPEN|DONE] from → to (date): message`
 - Status/phase impact: <none | what moved>
 - Left for next agent: <what is unfinished, risks, traps>
 ```
+
+### 2026-11-19 20:38 — Antigravity — Step R4: vertical doubles after turns / near edges
+- Task asked by: owner (wants doubles to stand vertically/lengthwise inside the column in corner/tight cases instead of crosswise).
+- Changed:
+  - `lib/rendering/serpentine_layout.dart`: added `_Arm.afterTurn` flag; in `_next`, doubles now stand vertically (`w x 2w`) right after a turn or when crosswise (`2w x w`) does not fit within `doubleMargin`, and fall through to turn cleanly if neither fits straight at the end of a column (instead of forcing overflow).
+  - `test/rendering/serpentine_layout_test.dart`: added 3 unit tests covering a double right after a turn, a double near a side wall, and a double turning at the end of a column.
+  - `AI_HANDOFF.md`: updated R4 status, layout rule note, and Change Log.
+- Added/removed packages: none.
+- Verified:
+  - `flutter analyze`: PASSED (0 issues).
+  - `flutter test test/rendering/serpentine_layout_test.dart`: PASSED (20/20 tests).
+  - `flutter test`: 48 passed, 3 pre-existing UI test failures (`test/widget_test.dart`, `test/ui/game_screen_test.dart` — missing `CupertinoLocalizations` delegate for `ar` locale).
+- Docs updated: `AI_HANDOFF.md` only.
+- Status/phase impact: R4 done; awaiting owner visual check on device/emulator before R5.
+- Left for next agent: fix the pre-existing `CupertinoLocalizations` delegate warning failing the 3 UI tests when authorized, and proceed to R5 after owner visual check.
 
 ### 2026-11-19 — Claude (claude.ai chat) — Step R2: fixed-size serpentine layout
 - Task asked by: owner (fixed tile size, vertical columns, S-shaped path).
