@@ -6,7 +6,7 @@
 > The owner works with several agents on different days. No agent remembers
 > the previous one. This file is the memory.
 
-Last updated: 2026-11-18 by Claude (claude.ai chat). Created from a full read of the repo snapshot.
+Last updated: 2026-11-19 by Claude (claude.ai chat). Board redesign R3 done (old layout removed, tile size increased).
 
 ---
 
@@ -43,7 +43,7 @@ Last updated: 2026-11-18 by Claude (claude.ai chat). Created from a full read of
 
 ---
 
-## 2. Where development is (as of 2026-11-18)
+## 2. Where development is (as of 2026-11-19)
 
 Roadmap source: `docs/roadmap.md`.
 
@@ -52,14 +52,14 @@ Roadmap source: `docs/roadmap.md`.
 | 0 | Discovery, rules, docs | Docs exist but all still say **DRAFT v0.1**. Owner approval is not recorded anywhere. See Q-1. |
 | 1 | Flutter project, shell, fonts, theme | **Done.** |
 | 2 | Assets & UI design (table, tiles, menus, settings) | **Done in code**: painted tiles, 3 tile skins, wood table, main menu, mode selection, settings with persistence, ar/en localization. Owner look-approval not recorded. |
-| 3 | Playable prototype | **Essentially done**: 2-player and 4-player game screen, tap + drag/drop, turn timer, auto pass/draw, round result dialog, board layout that turns corners. Still random "AI". |
+| 3 | Playable prototype | **Essentially done**, but the owner rejected the old board look/line layout (see 3b). Being redone in steps R1-R6 (R1, R2 done). |
 | 4 | Real engine + rules + unit tests | **Started, not finished.** Engine is pure Dart with tests, but is still labeled PROTOTYPE and match-level logic lives in the UI. See section 5. |
 | 5 | AI (Easy/Medium/Hard/Expert) | Not started. `lib/ai/` does not exist. Computer plays a random legal move. |
 | 6-11 | Local multiplayer, online, profiles, shop, tournaments, release | Not started. |
 
-**One-line summary:** *Late Phase 3 / early Phase 4. The game is playable end-to-end per round, but there is no match end, no real AI, no sound, and the game logic still sits inside `game_screen.dart`.*
+**One-line summary:** *Late Phase 3 / early Phase 4. The owner asked for a board redesign (3b) before moving on; R1 (square framed board) and R2 (fixed-size serpentine layout, wired into BoardView) are done; owner must check R2 visually.*
 
-**Test status:** NOT RUN by the agent that created this file (no Flutter toolchain in that session). Test files exist (section 4). First action for any agent with a shell: run `flutter pub get`, `flutter gen-l10n`, `flutter analyze`, `flutter test` and record the real result in the Change Log.
+**Test status:** NOT RUN by any agent so far (no Flutter toolchain in the chat sessions). First action for any agent with a shell: run `flutter pub get`, `flutter gen-l10n`, `flutter analyze`, `flutter test` and record the real result in the Change Log.
 
 ---
 
@@ -68,6 +68,42 @@ Roadmap source: `docs/roadmap.md`.
 - Phase changes need explicit owner approval. Do not start Phase 5 work (AI) or Phase 6+ work "because it is next".
 - Finishing Phase 4 means: tests match `docs/game_rules.md`, and the rules in code have no `[ASSUMED]` item left unconfirmed by the owner.
 - Azneef mode: rules NOT provided by the owner yet. Do not invent them. The menu button is intentionally disabled ("Coming soon").
+
+### 3b. Board redesign plan (owner request, 2026-11-19)
+
+**Problems the owner showed in screenshots:** tile size changes as the line grows (24 -> 6); the line turns at unpredictable places; tiles touch/misalign at corners; no defined table; side player names were cut off.
+
+**Owner's target design:**
+- A SQUARE board with an inner color and a professionally designed frame. Players sit around it.
+- Tiles are ALWAYS vertical along each run and ALWAYS the same size. The order is fixed and never changes shape.
+- The line starts in the center. Right-end arm goes DOWN, left-end arm goes UP.
+- Before reaching the board edge: the lower arm turns LEFT, the upper arm turns RIGHT, and continues as a new run with a clear gap from the first run.
+- Then they turn again (lower arm goes back up, upper arm goes back down), and so on: a repeating S-shaped / serpentine path.
+- Doubles lie crosswise and never turn (existing rule, keep it).
+
+**Steps (one at a time; update this file after each; wait for owner OK):**
+
+| Step | Goal | Status |
+|---|---|---|
+| R1 | `BoardFrame` widget + game screen re-layout (square board, players around it, side names not cut) | DONE 2026-11-19 (owner confirmed the look; NOT RUN: analyze/test) |
+| R2 | Pure-Dart `SerpentineLayout`: FIXED tile size from the area, serpentine columns, tests | DONE 2026-11-19 (NOT RUN: analyze/test) |
+| R3 | Remove old `BoardLayout` (kept only `LayoutBox`/`LaidTile`), delete its test, `minArmTiles` 14 -> 12 (bigger tiles) | DONE 2026-11-19 (NOT RUN: analyze/test) |
+polish ghost slots/drop zone; decide tile size (Q-5) | PARTIAL |
+| R4 | Doubles and corner alignment polish (fixes the misalignment seen in screenshot 4), if the visual check shows problems | TODO |
+| R5 | Hand tiles and drag feedback at the same size as on the table; clearer gold ghost slots | TODO |
+| R6 | Update tests, `docs/architecture.md`, and this file | TODO |
+
+**Layout rules implemented in R2 (`lib/rendering/serpentine_layout.dart`):**
+- Tile size is fixed: `tileWidthFor(width, height)` depends only on the area. It picks the biggest width (26 down to 8 px) where each arm holds at least `minArmTiles` (12) normal pieces. About 16 px on a 179 px felt (checked with a Python port of the algorithm, not with Dart).
+- First piece: vertical in the center (a double lies crosswise). Right end = lower arm (goes down, turns LEFT). Left end = upper arm (goes up, turns RIGHT).
+- When the next normal piece does not fit in the column, a horizontal piece is placed BESIDE the last half of the last piece (beside the head of a double). The next column goes through the outer half of that turn piece, so columns are about 2w + gap apart, and it runs the opposite way (down becomes up, up becomes down).
+- A double lies crosswise and never turns. A piece after a double turns from the double's head.
+- The two arms are independent, so a placed piece never moves (only the tile size, which depends on the area, would move everything).
+- If an arm is completely full, extra pieces are placed outside the area and `overflow` is true (rare; tests skip such layouts).
+
+Capacity per arm (normal pieces), from a Python port of the algorithm:
+felt 179: width 13 -> 14, 15 -> 12, 16 -> 12 | felt 215: 13 -> 24, 15 -> 20, 16 -> 14.
+Capacity is not smooth: it jumps when a column fits one more piece.
 
 ---
 
@@ -91,8 +127,10 @@ lib/
     domino_back.dart, hidden_hand.dart            face-down tiles for other players
     tile_skin.dart                                ivory / ebony / ruby, byId() falls back to ivory
     wood_table.dart, wood_table_painter.dart, table_skin.dart   walnut table (seeded grain, RepaintBoundary)
-    board_layout.dart          pure-Dart layout: vertical start, arms turn clockwise, doubles crosswise and never turn, tile size shrinks (24 -> 6) until it fits
-    board_view.dart            draws line + ghost slots (gold = target)
+    board_frame.dart           (R1) square frame: wood + gold line + green felt; only decorates, fills its parent
+    serpentine_layout.dart     (R2) fixed-size serpentine layout used by BoardView: tileWidthFor, armCapacity, fit, compute. Reuses LayoutBox/LaidTile from board_layout.dart
+        board_layout.dart          only LayoutBox and LaidTile (the old BoardLayout was removed in R3). Rename later if wanted. No longer used by BoardView. Still provides LayoutBox and LaidTile. Delete BoardLayout in R3/R6 after owner OK
+    board_view.dart            draws line + ghost slots (gold = target), uses SerpentineLayout
   state/settings_provider.dart SettingsState + NotifierProvider, saved in shared_preferences, invalid values fall back to defaults
   ui/
     screens/ main_menu, mode_selection, game_screen, settings, + DEV ONLY: tile_gallery, table_preview
@@ -100,17 +138,18 @@ lib/
     localized_names.dart       tileSkinName()
   l10n/ app_ar.arb (TEMPLATE), app_en.arb, generated app_localizations*.dart (do not edit by hand)
 test/
-  engine/ board_test, dealer_test, round_state_test
-  rendering/ board_layout_test (randomized full-round simulations, 100 seeds per config)
+  engine/ board_test, dealer_test, round_state_testserpentine_layout_test (R2: fixed size, capacity, arm directions, turn sides, random rounds, tiles never move)
   state/ settings_provider_test
   ui/ game_screen_test (360x640 fit test, Arabic strings)
   widget_test.dart, helpers/test_app.dart
 docs/ requirements.md, roadmap.md, architecture.md, game_rules.md, assets_licenses.md
 ```
 
+**Game screen layout (since R1):** ScoreBoard on top; middle area = a square `BoardFrame` (size = biggest square that fits between the players), top player above it, side players (4 players) in fixed 66 px slots next to it (`FittedBox` scaleDown so names are not cut); your hand at the bottom. Constants `_topReserve` (104), `_sideSlotWidth` (66), `_squareGap` (8) at the top of `_GameScreenState`.
+
 **Seat numbering:** counter-clockwise from bottom. 4 players: 0 = you, 1 = right opponent, 2 = partner (top), 3 = left opponent. 2 players: 0 = you, 1 = opponent (top). Teams with 4 players: `seat % 2`.
 
-**Directions on screen are physical, never language-dependent:** side players use physical left/right alignment on purpose; board layout uses physical coordinates. Do not "fix" this with `AlignmentDirectional`.
+**Directions on screen are physical, never language-dependent:** side players use physical left/right positioning on purpose; board layout uses physical coordinates. Do not "fix" this with `AlignmentDirectional`.
 
 **Rules as currently implemented (matches `docs/game_rules.md` unless noted):**
 - 7 tiles each, dealt 2-2-3. 2 players: 14-tile boneyard. 4 players: none.
@@ -140,6 +179,7 @@ Priority: **P1** blocks Phase 4 / correctness, **P2** should fix soon, **P3** cl
 - **I-7 iOS orientation mismatch.** `ios/Runner/Info.plist` still lists landscape orientations for iPhone; requirements say portrait only. `main.dart` locks portrait at runtime, but the plist should match. Android has no `screenOrientation` in the manifest (same situation).
 - **I-8 Sound.** The "Sound" setting exists and persists, but there is no audio code and no sound assets. Needs a package decision (state the reason) and a license entry in `docs/assets_licenses.md`.
 - **I-9 AI.** Computer players pick a random legal move (`_aiPlay`, `_autoPlayForMe`). Phase 5 replaces this. Keep the call sites small so a strategy interface can be dropped in.
+- **I-14 Tile size.** With `SerpentineLayout.minArmTiles` = 12 the fixed tile width is about 16 px on a 360x640 phone (felt about 179 px); each arm holds about 12 normal pieces, so about 25 in total. A very long round can fill one arm: extra pieces are drawn outside the frame and `overflow` is true. Options if the owner wants bigger tiles: lower `minArmTiles` more (more overflow risk) or enlarge the square (`_topReserve` in `game_screen.dart`).
 
 **P3**
 - **I-10 Dev screens must be removed before release:** `tile_gallery_screen.dart`, `table_preview_screen.dart` and their menu buttons (already hidden with `!kReleaseMode`). Also the redeal button in the game app bar. `tile_gallery_screen.dart` has its own `_skinName` that duplicates `tileSkinName` in `ui/localized_names.dart`.
@@ -158,7 +198,8 @@ Priority: **P1** blocks Phase 4 / correctness, **P2** should fix soon, **P3** cl
 - Do not use `package:flutter/material.dart`; this project uses `material_ui`.
 - Do not draw flat rectangles as final art; tiles stay painted with bevel/shadow/pips.
 - Do not add real-money features. Do not invent Azneef rules.
-- Do not move a placed tile once played (layout replays `Board.history`; tests enforce it at a fixed tile size).
+- Do not move a placed tile once played (the layout depends only on piece order and the area size; tests enforce it).
+- Do not make the tile size depend on how many pieces are on the board (owner requirement).
 
 ---
 
@@ -169,9 +210,13 @@ Priority: **P1** blocks Phase 4 / correctness, **P2** should fix soon, **P3** cl
 - Rules live in `GameRulesConfig` so Azneef can later be a variant.
 - Painted tiles/table with `CustomPainter` first; Flame only if Phase 3+ animation needs justify it.
 - Settings persisted with `shared_preferences`, injected via `sharedPreferencesProvider` so tests use a fake. Invalid saved values fall back to defaults.
-- Board layout: line starts vertical in the center; the right-end arm goes down, left-end arm goes up; arms turn 90° when they hit the safe zone; doubles are crosswise and never turn; tile size steps down from 24 to 6 so the line plus one more piece per end always fits.
+- OLD board layout (`BoardLayout`, replaced): tile size stepped down from 24 to 6 so the line always fit; arms turned clockwise at unpredictable places. Replaced by `SerpentineLayout` in R2.
+- 2026-11-19 (owner): the board is a SQUARE framed surface; tile size is FIXED for the whole round; runs are vertical and serpentine (see 3b).
+- 2026-11-19 (R1): felt color is dark green (`0xFF2A6B47` -> `0xFF123824`) as a first choice; it is a constructor parameter of `BoardFrame`. Owner said the look is good.
+- 2026-11-19 (R2): tile size is chosen so each arm holds at least 14 pieces (`minArmTiles`), accepting small tiles to avoid overflow. Open question Q-5.
 - Arabic is the default language; `app_ar.arb` is the l10n template.
 - Backend choice (Firebase vs Dart WebSocket server) deferred to Phase 7.
+- 2026-11-19 (R3): `minArmTiles` lowered from 14 to 12 (tile width 13 -> 16 px on a 179 px felt) to put bigger tiles on screen; accepted a small overflow risk in very long rounds. Old `BoardLayout` and its test deleted.
 
 ---
 
@@ -181,12 +226,17 @@ Format: `- [OPEN|DONE] from → to (date): message`
 
 - [OPEN] Claude (chat) → next agent (2026-11-18): Please run `flutter pub get && flutter gen-l10n && flutter analyze && flutter test` first and log the real results; I could not run them. If something fails, fix it before new work.
 - [OPEN] Claude (chat) → owner (2026-11-18): Questions Q-1..Q-4 below need your answers before Phase 4 can close.
+- [DONE] Claude (chat) → owner (2026-11-19): R1 visual check. Owner replied that everything is good.
+- [OPEN] Claude (chat) → owner (2026-11-19): R2 needs a visual check: tile size, gap between columns, turn direction (lower arm left, upper arm right), and doubles. Decide if tile size is OK (Q-5).
+- [OPEN] Claude (chat) → owner (2026-11-19): R3 visual check: bigger tiles; look at a long round to see whether any piece leaves the frame.
+
 
 ### Open questions for the owner
 - **Q-1** Were the 4 docs (requirements, roadmap, architecture, game_rules) approved? If yes, remove "DRAFT" and record the date here.
 - **Q-2** Confirm the `[ASSUMED]` rules (I-4): same-team tie starter; compulsory play; alternate drawing to find a starting double in 2-player mode.
 - **Q-3** "After a blocked round the blocker deals" (rules section 3) vs "the winner starts" (section 4): is "deals" only about who shuffles (no gameplay effect), or does it change who starts?
 - **Q-4** What should happen when the target score is reached: simple result screen with "play again / main menu"? Any extra UI wanted?
+- **Q-5** Tile width is now about 16 px (minArmTiles = 12). Is it big enough, or should it be even bigger with the risk that a very long round overflows the frame?
 
 ---
 
@@ -204,6 +254,30 @@ Format: `- [OPEN|DONE] from → to (date): message`
 - Left for next agent: <what is unfinished, risks, traps>
 ```
 
+### 2026-11-19 — Claude (claude.ai chat) — Step R2: fixed-size serpentine layout
+- Task asked by: owner (fixed tile size, vertical columns, S-shaped path).
+- Changed:
+  - `lib/rendering/serpentine_layout.dart` (new): fixed tile width from the area, serpentine path, turn pieces beside the last half, doubles crosswise and never turn, `overflow` flag.
+  - `test/rendering/serpentine_layout_test.dart` (new): fixed size, capacity, arm directions, turn sides, random full rounds (non-overflow layouts), placed tiles never move.
+  - `lib/rendering/board_view.dart`: uses `SerpentineLayout.fit` (import + one call changed).
+  - `AI_HANDOFF.md`: plan table, layout rules, code map, I-14, Q-5, inbox.
+- Added/removed packages: none.
+- Verified: NOT RUN (no Flutter toolchain in this session). Tile size numbers were computed by hand only.
+- Docs updated: `AI_HANDOFF.md` only. `docs/architecture.md` in R6.
+- Status/phase impact: R2 done, R3 partial.
+- Left for next agent: run `flutter analyze` and `flutter test`. Old `test/rendering/board_layout_test.dart` still tests the old `BoardLayout` and is unchanged. Fix any failing geometry test before new work. Tile size is small (I-14): wait for the owner's answer to Q-5.
+
+### 2026-11-19 — Claude (claude.ai chat) — Step R1: square framed board and table re-layout
+- Task asked by: owner (redesign of the board look and tile flow, split into small steps).
+- Changed:
+  - `lib/rendering/board_frame.dart` (new): square frame widget (carved wood frame, gold line, green felt, shadow). Decoration only.
+  - `lib/ui/screens/game_screen.dart`: `_buildTableArea` now computes the biggest square between the players and puts `BoardFrame` in it (`_buildBoardZone` wraps the drop zone in the frame); side players moved into fixed 66 px slots next to the square with `FittedBox` so names are not cut off; removed the old fixed paddings (108 / 76). Game logic, timers and hand code unchanged.
+- Added/removed packages: none.
+- Verified: NOT RUN (no Flutter toolchain in this session). Expected: `test/ui/game_screen_test.dart` (360x640) still passes; `board_layout_test` untouched.
+- Docs updated: `AI_HANDOFF.md` (section 3b, code map, I-14, Q-5).
+- Status/phase impact: Board redesign R1 done.
+- Left for next agent: the felt color is a first choice (green); owner said the look is good.
+
 ### 2026-11-18 — Claude (claude.ai chat) — Created AI_HANDOFF.md
 - Task asked by: owner (asked for a shared understanding file between all AI agents).
 - Changed: `AI_HANDOFF.md` (new, repo root). No code changed.
@@ -212,3 +286,16 @@ Format: `- [OPEN|DONE] from → to (date): message`
 - Docs updated: none. Found stale items, recorded as I-5, I-11.
 - Status/phase impact: Recorded the project as late Phase 3 / early Phase 4.
 - Left for next agent: Run the verification commands (Inbox), then work on P1 items only if the owner approves; propose to the owner to close Phase 4 via I-1, I-2, I-3 and Q-1..Q-4.
+
+### 2026-11-19 — Claude (claude.ai chat) — Step R3: remove old layout, bigger tiles
+- Task asked by: owner (more tiles on screen, finish the redesign in small steps).
+- Changed:
+  - `lib/rendering/board_layout.dart`: now only `LayoutBox` and `LaidTile`; old `BoardLayout` removed.
+  - `test/rendering/board_layout_test.dart`: deleted (tested the removed class).
+  - `lib/rendering/serpentine_layout.dart`: `minArmTiles` 14 -> 12.
+  - `AI_HANDOFF.md`: plan table, capacity table, code map, I-14, Q-5, decisions, inbox.
+- Added/removed packages: none.
+- Verified: NOT RUN for Dart (no toolchain). The capacity numbers come from a Python port of `armCapacity`, not from Dart.
+- Docs updated: `AI_HANDOFF.md` only.
+- Status/phase impact: R3 done. R4 (doubles / corner polish) and R5 (hand and drag size) remain, plus R6 docs.
+- Left for next agent: run `flutter analyze` and `flutter test`. If any file still imports `BoardLayout`, change it to `SerpentineLayout`. Wait for the owner's visual check before R4.

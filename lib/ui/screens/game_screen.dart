@@ -13,6 +13,7 @@ import '../../engine/game_rules_config.dart';
 import '../../engine/round_result.dart';
 import '../../engine/round_state.dart';
 import '../../l10n/app_localizations.dart';
+import '../../rendering/board_frame.dart';
 import '../../rendering/board_view.dart';
 import '../../rendering/domino_tile.dart';
 import '../../rendering/hidden_hand.dart';
@@ -57,6 +58,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   /// Short side of the tile that follows your finger while dragging.
   static const double _feedbackWidth = 44;
+
+  /// Table layout (Phase R1). The square board sits in the middle; the top
+  /// player is above it and the side players (4 players) are beside it.
+  /// Height reserved above the square for the top player's card and tiles.
+  static const double _topReserve = 104;
+
+  /// Width of the slot beside the square for each side player.
+  static const double _sideSlotWidth = 66;
+
+  /// Free space kept around the square.
+  static const double _squareGap = 8;
 
   final math.Random _random = math.Random();
 
@@ -456,123 +468,157 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-  /// The middle part: other players around the line of play.
+  /// The middle part: a SQUARE framed board, with the other players around
+  /// it (top player above, side players beside it with four players).
+  ///
+  /// All positions here are physical (left/right of the screen) on purpose:
+  /// seating must not flip with the language direction.
   Widget _buildTableArea(AppLocalizations l10n, TileSkin skin) {
     final topCount = _round.hands[_topSeat].length;
 
-    return Stack(
-      children: [
-        // Top player: the partner (4 players) or the opponent (2 players).
-        Align(
-          alignment: Alignment.topCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                PlayerChip(
-                  name: _seatName(l10n, _topSeat),
-                  tileCount: topCount,
-                  isTurn: _turnSeat == _topSeat,
-                ),
-                const SizedBox(height: 8),
-                HiddenHand(count: topCount, skin: skin, tileWidth: 12),
-              ],
-            ),
-          ),
-        ),
+    return LayoutBuilder(
+      builder: (context, box) {
+        final sideSlot = _four ? _sideSlotWidth : 0.0;
 
-        // Side players (4 players only). Alignment is physical left/right
-        // on purpose: seating must not flip with the language direction.
-        if (_four)
-          Align(
-            alignment: const Alignment(-1, 0.4),
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: _SidePlayer(
-                name: _seatName(l10n, 3),
-                tileCount: _round.hands[3].length,
-                isTurn: _turnSeat == 3,
-                skin: skin,
-              ),
-            ),
-          ),
-        if (_four)
-          Align(
-            alignment: const Alignment(1, 0.4),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _SidePlayer(
-                name: _seatName(l10n, 1),
-                tileCount: _round.hands[1].length,
-                isTurn: _turnSeat == 1,
-                skin: skin,
-              ),
-            ),
-          ),
+        // The biggest square that fits between the players.
+        final maxSide = math.min(
+          box.maxWidth - 2 * sideSlot - 2 * _squareGap,
+          box.maxHeight - _topReserve - _squareGap,
+        );
+        final side = math.max(80.0, maxSide);
 
-        // Center: the line of play, which is also the drop zone.
-        // The padding keeps the tiles away from the screen edge and from
-        // the players' cards (top 108, sides 76 with four players).
-        Positioned.fill(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              _four ? 76 : 14,
-              108,
-              _four ? 76 : 14,
-              12,
-            ),
-            child: _buildBoardZone(l10n, skin),
-          ),
-        ),
+        // Center the square horizontally; if there is spare height, center
+        // it in the space under the top player.
+        final left = (box.maxWidth - side) / 2;
+        final spare = math.max(0.0, box.maxHeight - _topReserve - side);
+        final top = _topReserve + spare / 2;
 
-        // 2 players: how many pieces are left in the draw pile.
-        if (!_four)
-          Align(
-            alignment: Alignment.topLeft,
-            child: IgnorePointer(
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(10, 10, 0, 0),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xCC1D110A),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  l10n.boneyardCount(_round.boneyard.length),
-                  style: const TextStyle(color: AppColors.ivory, fontSize: 13),
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Top player: the partner (4 players) or the opponent (2).
+            Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PlayerChip(
+                      name: _seatName(l10n, _topSeat),
+                      tileCount: topCount,
+                      isTurn: _turnSeat == _topSeat,
+                    ),
+                    const SizedBox(height: 8),
+                    HiddenHand(count: topCount, skin: skin, tileWidth: 12),
+                  ],
                 ),
               ),
             ),
-          ),
-      ],
+
+            // The square board.
+            Positioned(
+              left: left,
+              top: top,
+              width: side,
+              height: side,
+              child: _buildBoardZone(l10n, skin),
+            ),
+
+            // Side players (4 players only), each in its own fixed-width
+            // slot next to the square, so their names are never cut off.
+            if (_four)
+              Positioned(
+                left: math.max(0.0, left - sideSlot),
+                top: top,
+                width: sideSlot,
+                height: side,
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: _SidePlayer(
+                      name: _seatName(l10n, 3),
+                      tileCount: _round.hands[3].length,
+                      isTurn: _turnSeat == 3,
+                      skin: skin,
+                    ),
+                  ),
+                ),
+              ),
+            if (_four)
+              Positioned(
+                left: math.min(box.maxWidth - sideSlot, left + side),
+                top: top,
+                width: sideSlot,
+                height: side,
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: _SidePlayer(
+                      name: _seatName(l10n, 1),
+                      tileCount: _round.hands[1].length,
+                      isTurn: _turnSeat == 1,
+                      skin: skin,
+                    ),
+                  ),
+                ),
+              ),
+
+            // 2 players: how many pieces are left in the draw pile.
+            if (!_four)
+              Align(
+                alignment: Alignment.topLeft,
+                child: IgnorePointer(
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(10, 10, 0, 0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC1D110A),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      l10n.boneyardCount(_round.boneyard.length),
+                      style: const TextStyle(
+                        color: AppColors.ivory,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
+  /// The framed square. Its inside is the line of play and the drop zone.
   Widget _buildBoardZone(AppLocalizations l10n, TileSkin skin) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: DragTarget<DominoPiece>(
-            onWillAcceptWithDetails: (details) => _isPlayable(details.data),
-            onMove: _onDragMove,
-            onLeave: (_) {
-              if (_hoverEnd != null) setState(() => _hoverEnd = null);
-            },
-            onAcceptWithDetails: _onDrop,
-            builder: (context, candidates, rejected) =>
-                SizedBox.expand(child: _buildBoard(l10n, skin)),
+    return BoardFrame(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DragTarget<DominoPiece>(
+              onWillAcceptWithDetails: (details) => _isPlayable(details.data),
+              onMove: _onDragMove,
+              onLeave: (_) {
+                if (_hoverEnd != null) setState(() => _hoverEnd = null);
+              },
+              onAcceptWithDetails: _onDrop,
+              builder: (context, candidates, rejected) =>
+                  SizedBox.expand(child: _buildBoard(l10n, skin)),
+            ),
           ),
-        ),
-        if (_status != null)
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: IgnorePointer(child: _StatusPill(text: _statusText(l10n))),
-          ),
-      ],
+          if (_status != null)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: IgnorePointer(child: _StatusPill(text: _statusText(l10n))),
+            ),
+        ],
+      ),
     );
   }
 

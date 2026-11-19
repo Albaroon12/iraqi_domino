@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../core/constants/app_colors.dart';
 import '../engine/board.dart';
 import 'board_layout.dart';
+import 'serpentine_layout.dart';
 import 'domino_tile.dart';
 import 'tile_skin.dart';
 
@@ -43,7 +44,7 @@ class BoardView extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, box) {
-        final layout = BoardLayout.fit(
+                final layout = SerpentineLayout.fit(
           board,
           box.maxWidth,
           box.maxHeight,
