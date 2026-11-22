@@ -16,6 +16,9 @@ Items marked **[ASSUMED]** were not explicitly confirmed and need owner review.
 - Tiles are dealt randomly in the pattern 2, then 2, then 3 per player.
 - 2 players: the remaining 14 tiles form the draw pile (boneyard).
 - 4 players: all 28 tiles are dealt; no draw pile.
+- Invalid deal (automatic redeal): if any player is dealt 6 or more doubles, or
+  6 or more tiles containing the same number (0–6), the deal is invalid and
+  must be re-dealt automatically (prevented at deal time by the engine).
 - After a blocked round, the player who blocked the game deals (draws 2-2-3).
 
 ## 4. Starting a Round
@@ -23,9 +26,9 @@ Items marked **[ASSUMED]** were not explicitly confirmed and need owner review.
 - 4 players: holder of 6-6 starts and MUST open with 6-6.
 - 2 players: holder of the highest double starts and must open with it
   (6-6, else 5-5, else 4-4, ... down to 0-0).
-- 2 players, no double held by either player: players draw from the
-  boneyard until a double appears. **[ASSUMED]** alternate draws, one tile
-  at a time, starting from a random player.
+- 2 players, no double held by either player: players draw alternately from
+  the boneyard, one tile at a time (starting from a random player), until a
+  double appears; the drawer of that double starts and opens with it.
 
 ### Later rounds
 - The winner of the previous round starts and may open with any tile.
@@ -42,9 +45,9 @@ Items marked **[ASSUMED]** were not explicitly confirmed and need owner review.
 - 4 players: the player says "I have none" / passes; turn moves on.
   **[ASSUMED]** passing is allowed only when no legal move exists
   (playing is compulsory).
-- 2 players: the player draws from the boneyard.
-  **[ASSUMED]** draws until a playable tile is obtained; if the boneyard
-  is empty, the player passes.
+- 2 players: the player on turn draws from the boneyard until a playable
+  tile is obtained (not alternating); if the boneyard is empty, the player
+  passes.
 - Passing and drawing are AUTOMATIC: when the player on turn has no legal
   move, the game says "I have none" / passes (or draws with two players)
   after a short delay. The player never presses a button for it.

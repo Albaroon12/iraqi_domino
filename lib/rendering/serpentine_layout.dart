@@ -51,7 +51,6 @@ class _Arm {
 ///   turns left, the upper arm turns right). The next column starts above
 ///   or below that horizontal piece, one tile-width away from the old
 ///   column, and runs the opposite way (down becomes up, up becomes down).
-/// - A double lies crosswise to the line and never turns.
 /// - A double lies crosswise in a column when it fits cleanly; right after a
 ///   turn or near a side wall where crosswise does not fit, it stands
 ///   vertically (lengthwise) inside the column like a normal piece, and if it
@@ -256,9 +255,6 @@ class SerpentineLayout {
     double height, {
     required bool force,
   }) {
-    final len = isDouble ? w : 2 * w;
-    final thick = isDouble ? 2 * w : w;
-    final m = isDouble ? doubleMargin : margin;
     if (isDouble) {
       // Crosswise (horizontal) in the column, except right after a turn
       // (where it would overhang the inner half of the turn piece).
@@ -273,9 +269,6 @@ class SerpentineLayout {
         }
       }
 
-    // Straight on, in the same column.
-    final top = a.dir > 0 ? a.edge + gap : a.edge - gap - len;
-    final straight = LayoutBox(a.x - thick / 2, top, thick, len);
       // Lengthwise (vertical) in the column when crosswise does not fit
       // (e.g. right after a turn or near a side edge).
       final top = a.dir > 0 ? a.edge + gap : a.edge - gap - 2 * w;
@@ -291,10 +284,6 @@ class SerpentineLayout {
       final top = a.dir > 0 ? a.edge + gap : a.edge - gap - 2 * w;
       final straight = LayoutBox(a.x - w / 2, top, w, 2 * w);
 
-    if (_within(straight, m, width, height) || (isDouble && force)) {
-      a.edge = a.dir > 0 ? straight.bottom : straight.top;
-      a.last = straight;
-      return _Placed(straight, a.dir > 0 ? _Dir.down : _Dir.up);
       if (_within(straight, margin, width, height)) {
         a.edge = a.dir > 0 ? straight.bottom : straight.top;
         a.last = straight;
@@ -302,9 +291,6 @@ class SerpentineLayout {
         return _Placed(straight, a.dir > 0 ? _Dir.down : _Dir.up);
       }
     }
-
-    // A double NEVER turns.
-    if (isDouble) return null;
 
     // Turn: a horizontal piece beside the last half of the last piece
     // (or beside the head of a double).

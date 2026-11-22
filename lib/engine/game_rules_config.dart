@@ -9,4 +9,11 @@ class GameRulesConfig {
 
   /// Points needed to win the match.
   final int targetScore;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GameRulesConfig && other.targetScore == targetScore;
+
+  @override
+  int get hashCode => targetScore.hashCode;
 }

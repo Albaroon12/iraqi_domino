@@ -13,9 +13,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appTitle => 'الدومينو العراقي';
 
   @override
-  String get phaseOneReady => 'هيكل التطبيق جاهز';
-
-  @override
   String get tileGallery => 'معرض القطع';
 
   @override
@@ -56,9 +53,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get comingSoon => 'قريباً';
-
-  @override
-  String get gameScreenComingSoon => 'شاشة اللعب تأتي في الخطوة القادمة';
 
   @override
   String targetScoreLabel(int score) {
@@ -102,26 +96,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get targetShort => 'الهدف';
 
   @override
-  String tilesLeft(int count) {
-    return 'القطع: $count';
-  }
-
-  @override
   String boneyardCount(int count) {
     return 'السحب: $count';
   }
-
-  @override
-  String get passButton => 'ما عندي';
-
-  @override
-  String get drawButton => 'اسحب';
-
-  @override
-  String get featureComingSoon => 'هذه الميزة تأتي في مرحلة لاحقة';
-
-  @override
-  String get previewRoundResult => 'معاينة نتيجة الجولة';
 
   @override
   String get weWonRound => 'فزتم بالجولة';
@@ -168,7 +145,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get redeal => 'إعادة التوزيع';
 
   @override
-  String get youStartRoundFree => 'تبدأ الجولة';
+  String get youStartRoundFree => 'تبدأ الجولة بأي قطعة';
 
   @override
   String otherStartsRoundFree(String name) {

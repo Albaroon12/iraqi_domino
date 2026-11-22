@@ -40,43 +40,81 @@ class Dealer {
   /// Deals the FIRST round of a match:
   /// - 4 players: the holder of 6-6 starts and opens with 6-6.
   /// - 2 players: the holder of the highest double starts and opens with it.
-  ///
-  /// PROTOTYPE: with two players, if nobody holds a double we simply deal
-  /// again. The agreed rule (drawing until a double appears) comes in Phase 4.
+  ///   If neither player holds a double, they draw alternately from the
+  ///   boneyard (one tile at a time, starting from a random player) until a
+  ///   double appears; the drawer of that double starts and opens with it.
   static RoundSetup dealFirstRound(int playerCount, Random random) {
     assert(playerCount == 2 || playerCount == 4);
 
-    while (true) {
-      final dealt = deal(playerCount, random);
-      final start = _findStart(dealt.hands);
-      if (start != null) {
+    final dealt = deal(playerCount, random);
+    final hands = [
+      for (final hand in dealt.hands) [...hand],
+    ];
+    final boneyard = [...dealt.boneyard];
+
+    final start = _findStart(hands);
+    if (start != null) {
+      return RoundSetup(
+        hands: hands,
+        boneyard: boneyard,
+        startSeat: start.seat,
+        startPiece: start.piece,
+      );
+    }
+
+    // 2 players with no initial double: alternate draws until a double appears.
+    var seat = random.nextInt(playerCount);
+    while (boneyard.isNotEmpty) {
+      final piece = boneyard.removeLast();
+      hands[seat].add(piece);
+      if (piece.isDouble) {
         return RoundSetup(
-          hands: dealt.hands,
-          boneyard: dealt.boneyard,
-          startSeat: start.seat,
-          startPiece: start.piece,
+          hands: hands,
+          boneyard: boneyard,
+          startSeat: seat,
+          startPiece: piece,
         );
       }
+      seat = (seat + 1) % playerCount;
     }
+
+    throw StateError('No double found in full domino set');
   }
 
   /// Shuffles the full set and deals it in the 2-2-3 pattern.
+  ///
+  /// Automatically re-deals if any player receives 6 or more doubles or
+  /// 6 or more tiles sharing the same number.
   static ({List<List<DominoPiece>> hands, List<DominoPiece> boneyard}) deal(
     int playerCount,
     Random random,
   ) {
-    final pile = DominoPiece.fullSet()..shuffle(random);
-    final hands = List.generate(playerCount, (_) => <DominoPiece>[]);
+    while (true) {
+      final pile = DominoPiece.fullSet()..shuffle(random);
+      final hands = List.generate(playerCount, (_) => <DominoPiece>[]);
 
-    var next = 0;
-    for (final chunk in dealPattern) {
-      for (var seat = 0; seat < playerCount; seat++) {
-        hands[seat].addAll(pile.sublist(next, next + chunk));
-        next += chunk;
+      var next = 0;
+      for (final chunk in dealPattern) {
+        for (var seat = 0; seat < playerCount; seat++) {
+          hands[seat].addAll(pile.sublist(next, next + chunk));
+          next += chunk;
+        }
+      }
+
+      if (hands.every(isValidHand)) {
+        return (hands: hands, boneyard: pile.sublist(next));
       }
     }
+  }
 
-    return (hands: hands, boneyard: pile.sublist(next));
+  /// Returns false if [hand] has 6 or more doubles or 6 or more tiles
+  /// containing the same number (0–6), which requires an automatic redeal.
+  static bool isValidHand(List<DominoPiece> hand) {
+    if (hand.where((p) => p.isDouble).length >= 6) return false;
+    for (var value = 0; value <= 6; value++) {
+      if (hand.where((p) => p.hasSide(value)).length >= 6) return false;
+    }
+    return true;
   }
 
   /// Finds the highest double among all hands (6-6 first, then 5-5 ...).

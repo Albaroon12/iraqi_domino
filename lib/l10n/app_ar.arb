@@ -1,7 +1,6 @@
 {
   "@@locale": "ar",
   "appTitle": "الدومينو العراقي",
-  "phaseOneReady": "هيكل التطبيق جاهز",
   "tileGallery": "معرض القطع",
   "tablePreview": "معاينة الطاولة",
   "skinIvory": "عاجي",
@@ -16,7 +15,6 @@
   "modeFourPlayersDesc": "فريقان، وشريكك يجلس مقابلك",
   "modeAzneef": "أزنيف",
   "comingSoon": "قريباً",
-  "gameScreenComingSoon": "شاشة اللعب تأتي في الخطوة القادمة",
   "targetScoreLabel": "الهدف: {score} نقطة",
   "@targetScoreLabel": {
     "placeholders": {
@@ -37,14 +35,6 @@
   "teamUs": "فريقنا",
   "teamThem": "فريقهم",
   "targetShort": "الهدف",
-  "tilesLeft": "القطع: {count}",
-  "@tilesLeft": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "boneyardCount": "السحب: {count}",
   "@boneyardCount": {
     "placeholders": {
@@ -53,10 +43,6 @@
       }
     }
   },
-  "passButton": "ما عندي",
-  "drawButton": "اسحب",
-  "featureComingSoon": "هذه الميزة تأتي في مرحلة لاحقة",
-  "previewRoundResult": "معاينة نتيجة الجولة",
   "weWonRound": "فزتم بالجولة",
   "theyWonRound": "فاز الخصم بالجولة",
   "roundBurned": "جولة محروقة",
@@ -83,7 +69,7 @@
     }
   },
   "nextRound": "الجولة التالية",
-    "youStartRound": "تبدأ الجولة بالقطعة {piece}",
+  "youStartRound": "تبدأ الجولة بالقطعة {piece}",
   "@youStartRound": {
     "placeholders": {
       "piece": {
@@ -103,7 +89,7 @@
     }
   },
   "redeal": "إعادة التوزيع",
-    "youStartRoundFree": "تبدأ الجولة بأي قطعة",
+  "youStartRoundFree": "تبدأ الجولة بأي قطعة",
   "otherStartsRoundFree": "{name} يبدأ الجولة",
   "@otherStartsRoundFree": {
     "placeholders": {
@@ -135,7 +121,5 @@
         "type": "String"
       }
     }
-  },
-  "youStartRoundFree": "تبدأ الجولة"
-
+  }
 }

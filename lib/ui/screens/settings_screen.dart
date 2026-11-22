@@ -88,12 +88,44 @@ class SettingsScreen extends ConsumerWidget {
               ),
               _Section(
                 title: l10n.settingsSound,
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Switch(
-                    value: settings.soundEnabled,
-                    onChanged: notifier.setSound,
-                  ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          l10n.settingsSound,
+                          style: const TextStyle(
+                            color: AppColors.ivory,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Switch(
+                          value: settings.soundEnabled,
+                          onChanged: notifier.setSound,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          Localizations.localeOf(context).languageCode == 'ar'
+                              ? 'أجواء المقهى العراقي'
+                              : 'Iraqi café ambience',
+                          style: const TextStyle(
+                            color: AppColors.ivory,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Switch(
+                          value: settings.ambientEnabled,
+                          onChanged: notifier.setAmbientSound,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],

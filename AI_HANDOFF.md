@@ -6,7 +6,7 @@
 > The owner works with several agents on different days. No agent remembers
 > the previous one. This file is the memory.
 
-Last updated: 2026-11-19 by Claude (claude.ai chat). Board redesign R3 done (old layout removed, tile size increased).
+Last updated: 2026-11-20 by Antigravity. Fixed SerpentineLayout syntax error; completed responsive 2p/4p GameScreen UI polish (tall board, edge-to-edge dock, opponent racks, score/target badges, round history, smooth BoardView pan/fallback).
 
 ---
 
@@ -57,7 +57,7 @@ Roadmap source: `docs/roadmap.md`.
 | 5 | AI (Easy/Medium/Hard/Expert) | Not started. `lib/ai/` does not exist. Computer plays a random legal move. |
 | 6-11 | Local multiplayer, online, profiles, shop, tournaments, release | Not started. |
 
-**One-line summary:** *Late Phase 3 / early Phase 4. The owner asked for a board redesign (3b) before moving on; R1 (square framed board) and R2 (fixed-size serpentine layout, wired into BoardView) are done; owner must check R2 visually.*
+**One-line summary:** *Late Phase 3 / early Phase 4. Board & table UI redesign (R1–R4 + responsive 2p/4p layout, edge-to-edge dock, opponent racks, score/target badges, round history, and smooth pan/fallback in `BoardView`) is implemented; awaiting owner visual/manual test, R5/R6 polish, and P1 Phase 4 engine work (`I-1..I-4`).*
 
 **Test status:** NOT RUN by any agent so far (no Flutter toolchain in the chat sessions). First action for any agent with a shell: run `flutter pub get`, `flutter gen-l10n`, `flutter analyze`, `flutter test` and record the real result in the Change Log.
 
@@ -145,7 +145,7 @@ test/
 docs/ requirements.md, roadmap.md, architecture.md, game_rules.md, assets_licenses.md
 ```
 
-**Game screen layout (since R1):** ScoreBoard on top; middle area = a square `BoardFrame` (size = biggest square that fits between the players), top player above it, side players (4 players) in fixed 66 px slots next to it (`FittedBox` scaleDown so names are not cut); your hand at the bottom. Constants `_topReserve` (104), `_sideSlotWidth` (66), `_squareGap` (8) at the top of `_GameScreenState`.
+**Game screen layout (updated 2026-11-20):** Compact `AppBar` (`toolbarHeight: 40`, no target pill). Smooth dark radial background (`DecoratedBox`, replacing `WoodTable` on `GameScreen`). Top area: `PlayerChip` + `score/target` `_PlayerScoreBadge` + 7-slot `_TileRack` (with `14/14` boneyard pill on top-left in 2p mode and round history dialog button on top-right). Middle area: responsive rectangular `BoardFrame` + `BoardView` (uses full available height; pans smoothly when one arm overflows and steps `tileWidth` down only as a fallback). Side players (4p): anchored flush to physical left/right screen edges (`textDirection: TextDirection.ltr` on `_SidePlayer` `Column`) with `compact` `PlayerChip`, flush `score/target` badge (no star icon), and flush vertical `_TileRack`. Bottom area: edge-to-edge dark dock (`SafeArea(left: false, right: false, bottom: false)`), 7-tile clipped scrollable `_HandTile` rack on top, and your `PlayerChip` + `score/target` badge below. All spacing and sizes scale responsively with screen dimensions. (`ScoreBoard` widget still exists in `ui/widgets/score_board.dart` but is no longer used in `GameScreen`.)
 
 **Seat numbering:** counter-clockwise from bottom. 4 players: 0 = you, 1 = right opponent, 2 = partner (top), 3 = left opponent. 2 players: 0 = you, 1 = opponent (top). Teams with 4 players: `seat % 2`.
 
@@ -153,6 +153,7 @@ docs/ requirements.md, roadmap.md, architecture.md, game_rules.md, assets_licens
 
 **Rules as currently implemented (matches `docs/game_rules.md` unless noted):**
 - 7 tiles each, dealt 2-2-3. 2 players: 14-tile boneyard. 4 players: none.
+- Invalid deal prevention: if any hand has 6+ doubles or 6+ tiles sharing the same number (0–6), `Dealer.deal` automatically re-deals so invalid hands never enter play.
 - First round: holder of highest double opens with it (4 players: always 6-6).
 - Later rounds: winner of previous round starts with any piece. Burned round: dealt like a first round.
 - Playing is compulsory. Pass/draw is automatic after a short delay (nobody presses a button). 2 players draw one tile at a time until a move exists, then pass only if the boneyard is empty.
@@ -168,16 +169,16 @@ docs/ requirements.md, roadmap.md, architecture.md, game_rules.md, assets_licens
 Priority: **P1** blocks Phase 4 / correctness, **P2** should fix soon, **P3** cleanup. Mark `[FIXED yyyy-mm-dd by <agent>]` instead of deleting.
 
 **P1**
-- **I-1 No match end.** `game_screen.dart` accumulates `_scores` and shows the target, but never checks if a side reached `targetScore`. The game just keeps dealing new rounds forever. Needs: match-over detection, a "match result" dialog/screen, and a way back to the menu.
-- **I-2 Game logic lives in the UI.** `_GameScreenState` owns the round, scores, timers, AI choice and next-round dealing. `docs/architecture.md` says there should be one Riverpod controller per match in `lib/state/`. Move match flow into an engine-level `MatchState` (pure Dart, tested) + a controller. Keep screens receiving plain data.
+- **I-1 No match end.** [FIXED 2026-11-20 by Antigravity] `MatchState` (`lib/engine/match_state.dart`) now tracks scores, history, and `winnerTeam`/`isOver` against `rules.targetScore`; `GameScreen` shows `_MatchResultDialog` with Play Again / Back to Mode Selection when the target is reached.
+- **I-2 Game logic lives in the UI.** [FIXED 2026-11-20 by Antigravity] Match flow, timers, and turn orchestration moved into `MatchState` (`lib/engine/match_state.dart`) and Riverpod `MatchController` (`lib/state/match_controller.dart`); `GameScreen` watches `matchControllerProvider` and only manages UI interaction state (drag/select/dialogs).
 - **I-3 Engine is still a prototype.** `RoundState` is mutable and `Dealer.dealFirstRound` just re-deals when a 2-player deal has no double, instead of the agreed rule (players draw alternately from the boneyard until a double shows; `[ASSUMED]` who starts drawing). `GameRulesConfig` only has `targetScore`. The "blocker deals" rule from `game_rules.md` section 3 is not modeled (the code only models who *starts*).
-- **I-4 Two `[ASSUMED]` rules in `docs/game_rules.md` need owner confirmation** (same-team tie starter; compulsory play / draw-until-playable; alternate-draw start rule).
+- **I-4 Remaining `[ASSUMED]` rules in `docs/game_rules.md` need owner confirmation** (same-team tie starter; compulsory play in 4p). Confirmed on 2026-11-20: 2p draws until playable (non-alternating) during play, and alternates only at first-round opening when neither player holds a double.
 
 **P2**
-- **I-5 Localization file problems.** `lib/l10n/app_ar.arb` and `app_en.arb` both contain the key `youStartRoundFree` **twice**; JSON keeps the last value (ar: "تبدأ الجولة", en: "You start the round"), so the first, more descriptive text ("...with any piece") is silently dropped. Remove the duplicate and decide the intended wording. Also `app_en.arb` has odd indentation. Unused keys exist: `phaseOneReady`, `gameScreenComingSoon`, `passButton`, `drawButton`, `tilesLeft`, `featureComingSoon`, `previewRoundResult`. After editing .arb files run `flutter gen-l10n`.
+- **I-5 Localization file problems.** [FIXED 2026-11-20 by Antigravity] Removed duplicate `youStartRoundFree` key, fixed indentation, and removed the 7 unused keys (`phaseOneReady`, `gameScreenComingSoon`, `tilesLeft`, `passButton`, `drawButton`, `featureComingSoon`, `previewRoundResult`) in `lib/l10n/app_ar.arb` and `lib/l10n/app_en.arb`. Run `flutter gen-l10n` manually to regenerate `app_localizations*.dart`.
 - **I-6 `cupertino_ui: any` in pubspec** has no stated reason and no import in the shown code. Project rule: no package without a reason. Either document the reason or remove it (verify nothing imports it first).
 - **I-7 iOS orientation mismatch.** `ios/Runner/Info.plist` still lists landscape orientations for iPhone; requirements say portrait only. `main.dart` locks portrait at runtime, but the plist should match. Android has no `screenOrientation` in the manifest (same situation).
-- **I-8 Sound.** The "Sound" setting exists and persists, but there is no audio code and no sound assets. Needs a package decision (state the reason) and a license entry in `docs/assets_licenses.md`.
+- **I-8 Sound.** [PARTIALLY FIXED 2026-11-20 by Antigravity] Added `audioplayers ^6.1.0`, `lib/core/audio/sound_service.dart` (`SoundService`), `ambientEnabled` setting in `SettingsState`/`SettingsScreen`, and wired `playTilePlace`, `playTileDraw`, `playPass`, and `startCafeAmbient`/`stopCafeAmbient` into `MatchController` and `GameScreen`. Missing files in `assets/audio/` are safely ignored. Owner still needs to place licensed `.mp3` files (`cafe_ambient.mp3`, `tile_place.mp3`, `tile_draw.mp3`, `tile_pass.mp3`) in `assets/audio/` and record their licenses in `docs/assets_licenses.md`.
 - **I-9 AI.** Computer players pick a random legal move (`_aiPlay`, `_autoPlayForMe`). Phase 5 replaces this. Keep the call sites small so a strategy interface can be dropped in.
 - **I-14 Tile size.** With `SerpentineLayout.minArmTiles` = 12 the fixed tile width is about 16 px on a 360x640 phone (felt about 179 px); each arm holds about 12 normal pieces, so about 25 in total. A very long round can fill one arm: extra pieces are drawn outside the frame and `overflow` is true. Options if the owner wants bigger tiles: lower `minArmTiles` more (more overflow risk) or enlarge the square (`_topReserve` in `game_screen.dart`).
 
@@ -217,6 +218,10 @@ Priority: **P1** blocks Phase 4 / correctness, **P2** should fix soon, **P3** cl
 - Arabic is the default language; `app_ar.arb` is the l10n template.
 - Backend choice (Firebase vs Dart WebSocket server) deferred to Phase 7.
 - 2026-11-19 (R3): `minArmTiles` lowered from 14 to 12 (tile width 13 -> 16 px on a 179 px felt) to put bigger tiles on screen; accepted a small overflow risk in very long rounds. Old `BoardLayout` and its test deleted.
+- 2026-11-20 (owner): Removed `ScoreBoard` header box; each player shows `score/target` (e.g. `23/151`, no star icon) beside/under their chip, and a round-by-round score history dialog is accessible from the top-right corner.
+- 2026-11-20 (owner): Board is now a tall responsive rectangle (not forced square) with responsive margins, and `WoodTable` on `GameScreen` was replaced by a smooth dark radial background + edge-to-edge bottom dock with a 7-tile clipped scrollable rack above your player details.
+- 2026-11-20 (owner): `BoardView` handles single-arm long rounds by smoothly panning (`260ms`) toward empty board space first, and stepping down `tileWidth` only as a fallback when the full board span is exceeded (keeping `SerpentineLayout` pure).
+- 2026-11-20 (owner): In 4p mode, side players' score badges and vertical 7-slot tile racks emerge flush from physical left/right screen edges (`textDirection: TextDirection.ltr` so RTL does not flip them).
 
 ---
 
@@ -253,6 +258,173 @@ Format: `- [OPEN|DONE] from → to (date): message`
 - Status/phase impact: <none | what moved>
 - Left for next agent: <what is unfinished, risks, traps>
 ```
+
+### 2026-11-20 02:55 — Antigravity — Audio system (Iraqi café ambience + place/draw/pass SFX)
+- Task asked by: owner (add Iraqi café background ambience toggleable in Settings, plus tile place, tile draw, and pass sound effects).
+- Changed:
+  - `pubspec.yaml`: added `audioplayers: ^6.1.0` (needed for low-latency SFX + looping background ambience on Android/iOS) and declared `assets/audio/`.
+  - `lib/core/audio/sound_service.dart` (new): `SoundService` + `soundServiceProvider` safely checking `rootBundle` before playing `audio/cafe_ambient.mp3`, `audio/tile_place.mp3`, `audio/tile_draw.mp3`, and `audio/tile_pass.mp3` (no crash if assets are not yet added).
+  - `lib/state/settings_provider.dart`: added persisted `ambientEnabled` (`settings.ambient_sound`, default `true`) and `setAmbientSound`.
+  - `lib/ui/screens/settings_screen.dart`: added toggle for Iraqi café ambience under the Sound section.
+  - `lib/state/match_controller.dart`: triggered `playTilePlace`, `playTileDraw`, and `playPass` on move/draw/pass events.
+  - `lib/ui/screens/game_screen.dart`: added `WidgetsBindingObserver` to start/pause/resume/stop `startCafeAmbient` cleanly on match entry/exit and app lifecycle changes.
+  - `AI_HANDOFF.md`: updated I-8 and added Change Log entry.
+- Added/removed packages: added `audioplayers: ^6.1.0` (reason: SFX + looping ambient audio playback).
+- Verified: NOT RUN (by owner instruction: no `flutter pub get`, `flutter analyze`, or `flutter test` executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Audio code ready; awaiting `flutter pub get` and owner's `.mp3` files in `assets/audio/` + license entries in `docs/assets_licenses.md`.
+- Left for next agent: run `flutter pub get && flutter gen-l10n && flutter analyze && flutter test`.
+
+### 2026-11-20 02:42 — Antigravity — Natural placement UX: last-played glow, crisp drop, unclipped selection
+- Task asked by: owner (simplify unnatural mid-air spinning/flipping animations into practical, natural UX, and prevent selected 2-end tile from clipping under the rack/board).
+- Changed:
+  - `lib/state/match_controller.dart`: replaced `pendingOpponentMove`/`commitOpponentMove` delay with `lastPlayedPiece` in `MatchViewState`.
+  - `lib/rendering/board_view.dart`: added optional `lastPlacedPiece` and `_buildPlacedTile` (`900ms` soft fading gold glow on the most recently played tile so players immediately spot where anyone played).
+  - `lib/ui/screens/game_screen.dart`: removed mid-air spinning/flipping opponent flights; drag-drop snaps crisply on release; cancel returns smoothly (`220ms`); tap-to-play glides straight to the slot (`260ms`); tuned selected 2-end tile lift (`scale: 1.05`, `slide: -0.06`) inside `16px` top padding so it stays clearly visible and unclipped.
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Natural domino placement UX complete.
+- Left for next agent: run `flutter gen-l10n && flutter analyze && flutter test`.
+
+### 2026-11-20 02:37 — Antigravity — Selected-tile rack clearance & opponent face-down flight with flip-on-arrival
+- Task asked by: owner (keep 2-end selected tile rising cleanly above the hand rack without clipping, and animate opponent tiles flying face-down from their rack, rotating mid-flight, and flipping face-up as they land on the board).
+- Changed:
+  - `lib/state/match_controller.dart`: added `pendingOpponentMove` and idempotent `commitOpponentMove()` (with `450ms` fallback timer for headless tests) so the UI can fly opponent tiles before committing.
+  - `lib/ui/screens/game_screen.dart`: increased bottom hand rack top clearance (`16px`, height `tileWidth * 2 + 26`) with smooth `AnimatedScale` + `AnimatedSlide` for selected 2-end tiles; added `_rackKeys` on top/side `_TileRack`s and `_flyOpponentToBoard` using `startFaceDown: true` (`DominoBack` flipping to `DominoTile` at `t = 0.55..0.85` while rotating to `_targetRotation`).
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Selected-tile clearance and opponent tile flight complete.
+- Left for next agent: run `flutter gen-l10n && flutter analyze && flutter test`.
+
+### 2026-11-20 02:32 — Antigravity — Full hand-to-board flight with mid-air rotation for tap & drag
+- Task asked by: owner (wants tap-to-play and drag-drop to visibly fly out of the hand rack onto the board at a slightly slower, smoother pace, rotating mid-flight into the target board orientation).
+- Changed:
+  - `lib/ui/screens/game_screen.dart`: added `_boardKey` + `_targetRotation` (computes exact final `LaidTile` angle via `SerpentineLayout.fit`), unified `_flyToBoard` for both `_playMine` (tap, `360ms`) and `_onDrop` (drag, `340ms`), slowed return-to-hand flight to `320ms`, and interpolated `Transform.rotate(angle: toAngle * t)` inside `_flyOverlayTile`.
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Hand-to-board flight & mid-air rotation complete.
+- Left for next agent: run `flutter gen-l10n && flutter analyze && flutter test`.
+
+### 2026-11-20 02:28 — Antigravity — Removed board tile pop animation for natural placement
+- Task asked by: owner (wants natural, fluid drag/drop and tile placement without extra zoom/pop effects on the board).
+- Changed:
+  - `lib/rendering/board_view.dart`: removed `_AnimatedBoardTile` scale/fade wrapper so placed tiles appear naturally on the board without a pop effect, keeping only the smooth `BoardView` pan (`AnimatedPositioned`) and smooth hand/overlay drag-and-drop in `GameScreen`.
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Natural placement UX complete.
+- Left for next agent: run `flutter gen-l10n && flutter analyze && flutter test`.
+
+### 2026-11-20 02:25 — Antigravity — Smooth overlay return/drop flight and board tile landing physics
+- Task asked by: owner (fix clipped/snappy return-to-hand drag animation and make drag/drop and tile placement feel smooth and physical).
+- Changed:
+  - `lib/rendering/board_view.dart`: added `_AnimatedBoardTile` (`260ms easeOutCubic` scale 1.2 -> 1.0 + fade-in) keyed by unique piece identity so newly placed tiles land smoothly on the board.
+  - `lib/ui/screens/game_screen.dart`: added `TickerProviderStateMixin` and `_flyOverlayTile` overlay flight animations (`Curves.easeOutCubic`) so a canceled drag flies smoothly from release point into its live opening hand slot (keeping the hand slot tile invisible via `hidden` until landing, eliminating flicker/squish), and a dropped tile flies smoothly from the finger to the target board slot before committing the move.
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Drag-and-drop and placement animation polish complete.
+- Left for next agent: run `flutter gen-l10n && flutter analyze && flutter test` and verify animations on device/emulator.
+
+### 2026-11-20 02:16 — Antigravity — Fluid hand drag physics, 2p interactive boneyard draw table, and end-of-round tile reveal
+- Task asked by: owner (smooth hand collapse/expand during drag; 2-row wooden boneyard drawing table for 2p human draws; face-up reveal of remaining tiles + visual score tally on round end instead of round-ended text dialog).
+- Changed:
+  - `lib/engine/round_state.dart`, `lib/engine/match_state.dart`: added optional `[int? index]` parameter to `draw()` so the human player can draw a specific tile from the boneyard (backwards-compatible with `draw()`).
+  - `lib/state/match_controller.dart`: added `boneyardSlots` (fixed 14-slot layout), `awaitingHumanDraw`, `revealingRound`, and `drawHumanTile(int slotIndex)`. On round end, reveals remaining tiles for 3.2 s and automatically starts the next round (opening `_MatchResultDialog` only when `targetScore` is reached).
+  - `lib/ui/screens/game_screen.dart`: added smooth `AnimatedContainer` width collapse/expand (`220ms easeOutCubic`) for hand tiles on drag; added `_BoneyardDrawBoard` (2-row carved wooden table over the board for 2p human draws); updated `_TileRack`/`_SidePlayer` to flip remaining tiles face-up when `revealingRound` is true; replaced `showRoundResultDialog` with visual `_RoundTallyBadge` (`+points` / burned icon).
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Phase 4 UX polish complete; awaiting owner manual testing and approval for Phase 5.
+- Left for next agent: run `flutter gen-l10n && flutter analyze && flutter test` and verify drag physics, 2p boneyard table, and end-of-round reveal on device/emulator.
+
+### 2026-11-20 01:57 — Antigravity — Phase 4 step 3: l10n cleanup (I-5), architecture doc update, and MatchController tests
+- Task asked by: owner (continue Phase 4 cleanup).
+- Changed:
+  - `lib/l10n/app_ar.arb`, `lib/l10n/app_en.arb`: removed duplicate `youStartRoundFree` key, fixed indentation, and removed 7 unused keys (I-5).
+  - `docs/architecture.md`: removed duplicated settings bullet and updated engine/state/rendering descriptions to match `MatchState`, `MatchController`, `SerpentineLayout`, `BoardFrame`, and `BoardView`.
+  - `test/state/match_controller_test.dart` (new): unit tests for `MatchController` (initialization, `redeal`, `resetMatch`, `playHumanMove`, and clean disposal).
+  - `AI_HANDOFF.md`: marked I-5 fixed (pending `flutter gen-l10n`) and added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter gen-l10n`, `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Phase 4 implementation and cleanup complete pending manual `flutter gen-l10n`, `flutter analyze`, `flutter test`, and owner sign-off to begin Phase 5 (AI).
+- Left for next agent: run `flutter gen-l10n && flutter analyze && flutter test` and await owner approval before starting Phase 5 (`lib/ai/`).
+
+### 2026-11-20 01:49 — Antigravity — Phase 4 step 2: Riverpod MatchController (fixes I-2)
+- Task asked by: owner (continue Phase 4).
+- Changed:
+  - `lib/engine/game_rules_config.dart`: implemented `operator ==` and `hashCode` so `GameRulesConfig` works cleanly as a Riverpod family parameter.
+  - `lib/state/match_controller.dart` (new): Riverpod 3 `NotifierProvider.autoDispose.family` (`matchControllerProvider`) owning `MatchState`, timers, countdown, AI/draw/pass scheduling, and emitting immutable `MatchViewState` snapshots.
+  - `lib/ui/screens/game_screen.dart`: refactored to watch/listen to `matchControllerProvider`; removed all timers, `Random`, and direct engine mutation from `_GameScreenState` (UI interaction state only).
+  - `AI_HANDOFF.md`: marked I-2 fixed and added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: I-1 and I-2 fixed; remaining Phase 4 cleanup items are I-5 (`.arb` duplicates/unused keys), remaining I-4 confirmations, and docs cleanup (`docs/architecture.md`).
+- Left for next agent: run `flutter analyze` and `flutter test`; add unit tests for `MatchController` and clean up `app_ar.arb`/`app_en.arb` (I-5) when authorized.
+
+### 2026-11-20 01:44 — Antigravity — Confirmed 2p draw rules in docs
+- Task asked by: owner (confirmed that 2p normal draw is continuous by the same player until playable, while alternate drawing applies only to first-round opening when neither player holds a double).
+- Changed:
+  - `docs/game_rules.md`: removed `[ASSUMED]` from Section 4 (2p first-round alternate draw) and Section 6 (2p draw-until-playable, non-alternating).
+  - `AI_HANDOFF.md`: updated I-4 to reflect the confirmed rules and added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (documentation-only update; engine code in `round_state.dart` and `dealer.dart` already matches both rules).
+- Docs updated: `docs/game_rules.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Partial closure of I-4.
+- Left for next agent: proceed to `MatchController` in `lib/state/` (I-2) when owner is ready.
+
+### 2026-11-20 01:40 — Antigravity — Phase 4 step 1: MatchState, match-end dialog, and 2p alternate-draw rule
+- Task asked by: owner (start Phase 4 work).
+- Changed:
+  - `lib/engine/dealer.dart`: updated `Dealer.dealFirstRound` to implement alternate boneyard drawing when neither player holds an initial double in 2-player mode (per `docs/game_rules.md` Section 4).
+  - `test/engine/dealer_test.dart`: updated 2-player hand/boneyard length assertions to allow alternate-draw opening hands.
+  - `lib/engine/match_state.dart` (new): pure-Dart `MatchState` and `MatchRoundRecord` managing multi-round scores, round history, `winnerTeam`/`isOver` at `rules.targetScore`, `startNextRound`, and `resetMatch`.
+  - `test/engine/match_state_test.dart` (new): unit tests for 2p and 4p full matches, target-score termination, history totals, guard rails, and `resetMatch`.
+  - `lib/ui/screens/game_screen.dart`: wired `MatchState` into `_GameScreenState` (removing manual score/history/next-round dealing logic from the UI) and added `_MatchResultDialog` (Play Again / Back) when `targetScore` is reached (fixes I-1).
+  - `AI_HANDOFF.md`: marked I-1 fixed and added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Phase 4 underway (I-1 fixed, `MatchState` + alternate-draw done; I-2 Riverpod `MatchController` and I-5 l10n cleanup remain).
+- Left for next agent: run `flutter analyze` and `flutter test`; next Phase 4 step is moving timers/turn orchestration from `GameScreen` into a Riverpod `MatchController` in `lib/state/` (I-2) and cleaning up `app_ar.arb`/`app_en.arb` (I-5).
+
+### 2026-11-20 01:35 — Antigravity — Invalid-deal rule (6+ doubles or 6+ of same number)
+- Task asked by: owner (prevent dealing any hand with 6+ doubles or 6+ tiles of the same number).
+- Changed:
+  - `docs/game_rules.md`: documented automatic redeal rule for 6+ doubles or 6+ tiles sharing the same number (0–6) under Section 3 (Dealing).
+  - `lib/engine/dealer.dart`: added `Dealer.isValidHand` and looped `Dealer.deal` until all hands satisfy it.
+  - `test/engine/dealer_test.dart`: added unit tests for `Dealer.isValidHand` and 200-seed checks on `deal` and `dealFirstRound`.
+  - `AI_HANDOFF.md`: added rule note to Section 4 and Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `docs/game_rules.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Engine dealing rules updated ahead of Phase 4 completion.
+- Left for next agent: run `flutter test test/engine/dealer_test.dart` along with full `flutter analyze` and `flutter test`.
+
+### 2026-11-20 01:27 — Antigravity — Serpentine fix, BoardView smooth pan, and responsive 2p/4p GameScreen redesign
+- Task asked by: owner (fix `serpentine_layout.dart` compile errors; enlarge board height; replace `ScoreBoard` with per-player `score/target` + round history; add opponent tile racks; smooth single-arm overflow handling; responsive 2p/4p layout with edge-flush side racks/scores and edge-to-edge dark bottom dock).
+- Changed:
+  - `lib/rendering/serpentine_layout.dart`: removed leftover duplicate code/braces inside `_next` and stale doc comment line causing compile errors (`'top' is already declared`, `Can't find '}'`).
+  - `lib/rendering/board_view.dart`: added `_fitLayout` + `_bounds` and `AnimatedPositioned` (`260ms easeOutCubic`) to pan smoothly toward empty board space on `overflow` and step `tileWidth` down only as a fallback.
+  - `lib/ui/widgets/player_chip.dart`: added `compact` mode (smaller avatar/badge, darker high-contrast name pill, bolder text).
+  - `lib/ui/screens/game_screen.dart`: shrunk `AppBar` (`toolbarHeight: 40`); replaced `WoodTable` with dark radial gradient; removed `ScoreBoard` and added `_PlayerScoreBadge` (`score/target`, no star), `_TopInfoPill` (`14/14` boneyard in 2p + round log), `_RoundHistoryDialog`, and `_TileRack` (7-slot fixed span; horizontal for top, vertical flush-edge for 4p side players with `textDirection: TextDirection.ltr`); converted board to tall responsive rectangle; moved bottom hand into a clipped 7-tile scrollable rack above your chip inside an edge-to-edge bottom dock; made all reserves/gaps/tile widths responsive to screen size.
+  - `AI_HANDOFF.md`: updated snapshot, layout description, decisions, and Change Log.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md` only (`docs/` reviewed and unchanged).
+- Status/phase impact: Late Phase 3 / early Phase 4; UI redesign ready for owner visual/manual testing.
+- Left for next agent: run `flutter analyze` and `flutter test`; confirm R5/R6 polish and proceed to Phase 4 engine items (`I-1` match end, `I-2` Riverpod match controller, `I-3` engine completion, `I-4` rule confirmations) once owner approves.
 
 ### 2026-11-19 20:38 — Antigravity — Step R4: vertical doubles after turns / near edges
 - Task asked by: owner (wants doubles to stand vertically/lengthwise inside the column in corner/tight cases instead of crosswise).

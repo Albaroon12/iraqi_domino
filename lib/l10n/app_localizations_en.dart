@@ -13,9 +13,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Iraqi Domino';
 
   @override
-  String get phaseOneReady => 'App shell is ready';
-
-  @override
   String get tileGallery => 'Tile Gallery';
 
   @override
@@ -56,9 +53,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get comingSoon => 'Coming soon';
-
-  @override
-  String get gameScreenComingSoon => 'The game screen arrives in the next step';
 
   @override
   String targetScoreLabel(int score) {
@@ -102,26 +96,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get targetShort => 'Target';
 
   @override
-  String tilesLeft(int count) {
-    return 'Tiles: $count';
-  }
-
-  @override
   String boneyardCount(int count) {
     return 'Draw pile: $count';
   }
-
-  @override
-  String get passButton => 'I have none';
-
-  @override
-  String get drawButton => 'Draw';
-
-  @override
-  String get featureComingSoon => 'This feature comes in a later phase';
-
-  @override
-  String get previewRoundResult => 'Preview round result';
 
   @override
   String get weWonRound => 'You won the round';
@@ -168,7 +145,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get redeal => 'Deal again';
 
   @override
-  String get youStartRoundFree => 'You start the round';
+  String get youStartRoundFree => 'You start the round with any piece';
 
   @override
   String otherStartsRoundFree(String name) {

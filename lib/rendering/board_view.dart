@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../core/constants/app_colors.dart';
 import '../engine/board.dart';
+import '../engine/domino_piece.dart';
 import 'board_layout.dart';
 import 'serpentine_layout.dart';
 import 'domino_tile.dart';
@@ -19,6 +22,7 @@ class BoardView extends StatelessWidget {
     this.ghostDouble = false,
     this.activeEnds = const [],
     this.litEnds = const {},
+    this.lastPlacedPiece,
     this.onSlotTap,
   });
 
@@ -38,18 +42,22 @@ class BoardView extends StatelessWidget {
   /// Ends drawn bright gold; the other active ends are faint.
   final Set<BoardEnd> litEnds;
 
+  /// Most recently played piece, subtly highlighted so players can spot it.
+  final DominoPiece? lastPlacedPiece;
+
   final void Function(BoardEnd end)? onSlotTap;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, box) {
-                final layout = SerpentineLayout.fit(
+        final fitted = _fitLayout(
           board,
           box.maxWidth,
           box.maxHeight,
-          ghostDouble: ghostDouble,
+          ghostDouble,
         );
+        final layout = fitted.layout;
         final w = layout.tileWidth;
 
         Widget slot(BoardEnd end, GlobalKey key, LayoutBox b) => Positioned(
@@ -69,13 +77,154 @@ class BoardView extends StatelessWidget {
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            for (final t in layout.tiles)
-              Positioned(left: t.box.left, top: t.box.top, child: _tile(t, w)),
-            if (!board.isEmpty) slot(BoardEnd.left, leftKey, layout.leftSlot),
-            slot(BoardEnd.right, rightKey, layout.rightSlot),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              left: fitted.dx,
+              top: fitted.dy,
+              width: box.maxWidth,
+              height: box.maxHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (final t in layout.tiles)
+                    Positioned(
+                      left: t.box.left,
+                      top: t.box.top,
+                      child: _buildPlacedTile(t, w),
+                    ),
+                  if (!board.isEmpty)
+                    slot(BoardEnd.left, leftKey, layout.leftSlot),
+                  slot(BoardEnd.right, rightKey, layout.rightSlot),
+                ],
+              ),
+            ),
           ],
         );
       },
+    );
+  }
+
+  /// Keeps all placed tiles inside the board without changing the snake path:
+  /// first pans smoothly toward the empty space; only if the entire board span
+  /// is exceeded does it step [tileWidth] down as a fallback.
+  static ({SerpentineLayout layout, double dx, double dy}) _fitLayout(
+    Board board,
+    double width,
+    double height,
+    bool ghostDouble,
+  ) {
+    var layout = SerpentineLayout.fit(
+      board,
+      width,
+      height,
+      ghostDouble: ghostDouble,
+    );
+    if (!layout.overflow || layout.tiles.isEmpty) {
+      return (layout: layout, dx: 0, dy: 0);
+    }
+
+    const pad = 4.0;
+    final availW = math.max(0.0, width - 2 * pad);
+    final availH = math.max(0.0, height - 2 * pad);
+
+    var bounds = _bounds(layout.tiles);
+    var w = layout.tileWidth;
+    while ((bounds.width > availW || bounds.height > availH) &&
+        w > SerpentineLayout.minTileWidth) {
+      w = math.max(SerpentineLayout.minTileWidth, w - 1);
+      layout = SerpentineLayout.compute(
+        board,
+        width,
+        height,
+        w,
+        ghostDouble: ghostDouble,
+      );
+      bounds = _bounds(layout.tiles);
+    }
+
+    var dx = 0.0;
+    if (bounds.width > availW) {
+      dx = (width - (bounds.left + bounds.right)) / 2;
+    } else if (bounds.left < pad) {
+      dx = pad - bounds.left;
+    } else if (bounds.right > width - pad) {
+      dx = (width - pad) - bounds.right;
+    }
+
+    var dy = 0.0;
+    if (bounds.height > availH) {
+      dy = (height - (bounds.top + bounds.bottom)) / 2;
+    } else if (bounds.top < pad) {
+      dy = pad - bounds.top;
+    } else if (bounds.bottom > height - pad) {
+      dy = (height - pad) - bounds.bottom;
+    }
+
+    return (layout: layout, dx: dx, dy: dy);
+  }
+
+  static ({
+    double left,
+    double top,
+    double right,
+    double bottom,
+    double width,
+    double height,
+  })
+  _bounds(List<LaidTile> tiles) {
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = -double.infinity;
+    var bottom = -double.infinity;
+    for (final t in tiles) {
+      final b = t.box;
+      if (b.left < left) left = b.left;
+      if (b.top < top) top = b.top;
+      if (b.right > right) right = b.right;
+      if (b.bottom > bottom) bottom = b.bottom;
+    }
+    return (
+      left: left,
+      top: top,
+      right: right,
+      bottom: bottom,
+      width: right - left,
+      height: bottom - top,
+    );
+  }
+
+  Widget _buildPlacedTile(LaidTile t, double w) {
+    final child = _tile(t, w);
+    final last = lastPlacedPiece;
+    if (last == null) return child;
+    final matches =
+        math.min(t.firstValue, t.secondValue) == last.low &&
+        math.max(t.firstValue, t.secondValue) == last.high;
+    if (!matches) return child;
+
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('last-$last'),
+      tween: Tween(begin: 1.0, end: 0.0),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeOut,
+      builder: (context, glow, c) {
+        if (glow <= 0.01) return c!;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(w * 0.18),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.gold.withValues(alpha: 0.65 * glow),
+                blurRadius: 10 * glow,
+                spreadRadius: 1.5 * glow,
+              ),
+            ],
+          ),
+          child: c,
+        );
+      },
+      child: child,
     );
   }
 

@@ -16,6 +16,7 @@ class PlayerChip extends StatelessWidget {
     this.icon = Icons.person_rounded,
     this.secondsLeft,
     this.secondsTotal = 30,
+    this.compact = false,
   });
 
   final String name;
@@ -24,12 +25,15 @@ class PlayerChip extends StatelessWidget {
   final IconData icon;
   final int? secondsLeft;
   final int secondsTotal;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final left = secondsLeft;
     final urgent = left != null && left <= 10;
     const urgentColor = Color(0xFFE5533D);
+    final avatarSize = compact ? 28.0 : 34.0;
+    final badgeSize = compact ? 15.0 : 17.0;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -39,8 +43,8 @@ class PlayerChip extends StatelessWidget {
           children: [
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
-              width: 34,
-              height: 34,
+              width: avatarSize,
+              height: avatarSize,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
@@ -63,14 +67,18 @@ class PlayerChip extends StatelessWidget {
               child: urgent
                   ? Text(
                       '$left',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: urgentColor,
-                        fontSize: 15,
+                        fontSize: compact ? 13 : 15,
                         fontWeight: FontWeight.w800,
                         height: 1,
                       ),
                     )
-                  : Icon(icon, size: 20, color: AppColors.ivory),
+                  : Icon(
+                      icon,
+                      size: compact ? 16 : 20,
+                      color: AppColors.ivory,
+                    ),
             ),
             // Turn timer ring.
             if (left != null)
@@ -95,12 +103,12 @@ class PlayerChip extends StatelessWidget {
               ),
             // Tile count badge.
             Positioned(
-              right: -7,
-              bottom: -3,
+              right: compact ? -6 : -7,
+              bottom: compact ? -2 : -3,
               child: Container(
-                constraints: const BoxConstraints(minWidth: 17),
-                height: 17,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                constraints: BoxConstraints(minWidth: badgeSize),
+                height: badgeSize,
+                padding: EdgeInsets.symmetric(horizontal: compact ? 3 : 4),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: AppColors.gold,
@@ -108,9 +116,9 @@ class PlayerChip extends StatelessWidget {
                 ),
                 child: Text(
                   '$tileCount',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.walnut,
-                    fontSize: 11,
+                    fontSize: compact ? 10 : 11,
                     fontWeight: FontWeight.w800,
                     height: 1,
                   ),
@@ -119,12 +127,15 @@ class PlayerChip extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: compact ? 3 : 4),
         Container(
-          constraints: const BoxConstraints(maxWidth: 64),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          constraints: BoxConstraints(maxWidth: compact ? 48 : 64),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 5 : 6,
+            vertical: compact ? 2 : 2,
+          ),
           decoration: BoxDecoration(
-            color: const Color(0xAA1D110A),
+            color: const Color(0xE6120905),
             borderRadius: BorderRadius.circular(8),
           ),
           // Long names shrink instead of overflowing.
@@ -132,10 +143,10 @@ class PlayerChip extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               name,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.ivory,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontSize: compact ? 10.5 : 12,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),

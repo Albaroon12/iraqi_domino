@@ -21,20 +21,26 @@ Status: DRAFT v0.1
 - Rules live in GameRulesConfig, so Azneef can be added as a variant
   (spinner support) without rewriting core logic.
 - Backend decision deferred to Phase 7 (Firebase vs Dart WebSocket server).
-- Settings live in a Riverpod NotifierProvider (immutable SettingsState).
-  The app root watches the language from it, so switching language
-  updates direction (RTL/LTR) instantly. Persistence is added in step 2.5.
-- Screens receive plain data (names, scores, counts) and know nothing about
-  the engine, so the game screen layout is independent of the visual style.
-  A future redesign changes widgets/painters, not the layout contract.
 - Settings live in a Riverpod NotifierProvider (immutable SettingsState),
   persisted with shared_preferences (small key/value data only). Storage is
   injected via sharedPreferencesProvider so tests use a fake one. Invalid
-  saved values fall back to defaults.
-- engine/ now holds Board (line of play, end matching, orientation),
-  RoundState (turns, legal moves, pass/draw, domino/blocked/burned) and
-  RoundResult. RoundState is a PROTOTYPE (mutable); Phase 4 completes it
-  and tests it fully against game_rules.md.
+  saved values fall back to defaults. The app root watches the language from
+  it, so switching language updates direction (RTL/LTR) instantly.
+- Screens receive plain data (names, scores, counts) and know nothing about
+  the engine, so the game screen layout is independent of the visual style.
+  A future redesign changes widgets/painters, not the layout contract.
+- engine/ holds pure-Dart game logic: DominoPiece, Dealer (2-2-3 deal,
+  invalid-deal prevention, 2p alternate-draw opening double), Board (line of
+  play, end matching, orientation), RoundState (turns, legal moves,
+  pass/draw, domino/blocked/burned), RoundResult, GameRulesConfig, and
+  MatchState (multi-round scoring, round history, target-score match end).
+- state/ holds MatchController (`matchControllerProvider`, Riverpod
+  `NotifierProvider.autoDispose.family`) which owns MatchState, turn timers,
+  and AI/draw/pass scheduling, emitting immutable MatchViewState snapshots
+  to GameScreen.
+- rendering/ holds SerpentineLayout (pure Dart, fixed tile width from area),
+  BoardFrame, BoardView (with smooth pan + fallback scale for single-arm
+  overflow), DominoTile/DominoBack painters, and tile/table skins.
 
 ## Proposed Folder Structure
 lib/

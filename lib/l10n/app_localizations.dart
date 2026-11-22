@@ -104,12 +104,6 @@ abstract class AppLocalizations {
   /// **'الدومينو العراقي'**
   String get appTitle;
 
-  /// No description provided for @phaseOneReady.
-  ///
-  /// In ar, this message translates to:
-  /// **'هيكل التطبيق جاهز'**
-  String get phaseOneReady;
-
   /// No description provided for @tileGallery.
   ///
   /// In ar, this message translates to:
@@ -194,12 +188,6 @@ abstract class AppLocalizations {
   /// **'قريباً'**
   String get comingSoon;
 
-  /// No description provided for @gameScreenComingSoon.
-  ///
-  /// In ar, this message translates to:
-  /// **'شاشة اللعب تأتي في الخطوة القادمة'**
-  String get gameScreenComingSoon;
-
   /// No description provided for @targetScoreLabel.
   ///
   /// In ar, this message translates to:
@@ -278,41 +266,11 @@ abstract class AppLocalizations {
   /// **'الهدف'**
   String get targetShort;
 
-  /// No description provided for @tilesLeft.
-  ///
-  /// In ar, this message translates to:
-  /// **'القطع: {count}'**
-  String tilesLeft(int count);
-
   /// No description provided for @boneyardCount.
   ///
   /// In ar, this message translates to:
   /// **'السحب: {count}'**
   String boneyardCount(int count);
-
-  /// No description provided for @passButton.
-  ///
-  /// In ar, this message translates to:
-  /// **'ما عندي'**
-  String get passButton;
-
-  /// No description provided for @drawButton.
-  ///
-  /// In ar, this message translates to:
-  /// **'اسحب'**
-  String get drawButton;
-
-  /// No description provided for @featureComingSoon.
-  ///
-  /// In ar, this message translates to:
-  /// **'هذه الميزة تأتي في مرحلة لاحقة'**
-  String get featureComingSoon;
-
-  /// No description provided for @previewRoundResult.
-  ///
-  /// In ar, this message translates to:
-  /// **'معاينة نتيجة الجولة'**
-  String get previewRoundResult;
 
   /// No description provided for @weWonRound.
   ///
@@ -389,7 +347,7 @@ abstract class AppLocalizations {
   /// No description provided for @youStartRoundFree.
   ///
   /// In ar, this message translates to:
-  /// **'تبدأ الجولة'**
+  /// **'تبدأ الجولة بأي قطعة'**
   String get youStartRoundFree;
 
   /// No description provided for @otherStartsRoundFree.

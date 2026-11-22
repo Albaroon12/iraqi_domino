@@ -1,28 +1,28 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/audio/sound_service.dart';
 import '../../core/constants/app_colors.dart';
 import '../../engine/board.dart';
-import '../../engine/dealer.dart';
 import '../../engine/domino_piece.dart';
 import '../../engine/game_rules_config.dart';
+import '../../engine/match_state.dart';
 import '../../engine/round_result.dart';
 import '../../engine/round_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../rendering/board_frame.dart';
 import '../../rendering/board_view.dart';
+import '../../rendering/domino_back.dart';
 import '../../rendering/domino_tile.dart';
 import '../../rendering/hidden_hand.dart';
 import '../../rendering/tile_skin.dart';
-import '../../rendering/wood_table.dart';
+import '../../state/match_controller.dart';
 import '../../state/settings_provider.dart';
+import '../widgets/game_button.dart';
 import '../widgets/player_chip.dart';
-import '../widgets/round_result_dialog.dart';
-import '../widgets/score_board.dart';
 
 /// The game screen (PROTOTYPE, Phase 3).
 ///
@@ -42,243 +42,113 @@ class GameScreen extends ConsumerStatefulWidget {
   ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-/// What the small status pill says about the player who cannot play.
-enum _StatusKind { noTiles, passes, draws }
-
-class _GameScreenState extends ConsumerState<GameScreen> {
-  // Speed of the game. Change these numbers to make it faster or slower.
-  static const Duration _aiDelay = Duration(milliseconds: 900);
-  static const Duration _drawDelay = Duration(milliseconds: 700);
-  static const Duration _passDelay = Duration(milliseconds: 1300);
-  static const Duration _resultDelay = Duration(milliseconds: 700);
-
-  /// Seconds you have for each move. When it runs out, the computer plays
-  /// for you. Use 60 for a slower game.
-  static const int _turnSeconds = 30;
-
+class _GameScreenState extends ConsumerState<GameScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   /// Short side of the tile that follows your finger while dragging.
   static const double _feedbackWidth = 44;
 
-  /// Table layout (Phase R1). The square board sits in the middle; the top
-  /// player is above it and the side players (4 players) are beside it.
-  /// Height reserved above the square for the top player's card and tiles.
-  static const double _topReserve = 104;
-
-  /// Width of the slot beside the square for each side player.
-  static const double _sideSlotWidth = 66;
-
-  /// Free space kept around the square.
-  static const double _squareGap = 8;
-
-  final math.Random _random = math.Random();
+  /// Total boneyard tiles at the start of a two-player round.
+  static const int _initialBoneyardCount = 14;
 
   /// Keys to find where the two open ends are on the screen.
   final GlobalKey _leftSlotKey = GlobalKey();
   final GlobalKey _rightSlotKey = GlobalKey();
 
-  late RoundState _round;
+  /// Per-piece keys in your hand so a released tile flies straight back into
+  /// its live opening slot.
+  final Map<DominoPiece, GlobalKey> _handKeys = {};
 
-  /// Your legal moves. Filled only while it is your turn.
-  List<Move> _myMoves = const [];
+  /// Active overlay flight animations, cleaned up in [dispose].
+  final List<(OverlayEntry, AnimationController)> _activeFlights = [];
 
-  /// Match score: index 0 = your team, 1 = the other team.
-  final List<int> _scores = [0, 0];
-
-  Timer? _timer;
-  Timer? _turnTimer;
-  int _secondsLeft = _turnSeconds;
-  ({int seat, _StatusKind kind})? _status;
-
-  // Interaction state (your own turn only).
+  // Pure UI interaction state (your own turn only).
   DominoPiece? _dragging;
+  DominoPiece? _returningPiece;
+  DominoPiece? _flyingToBoard;
   DominoPiece? _selected;
   BoardEnd? _hoverEnd;
+  double _lastHandTileWidth = 36;
+  bool _dialogOpen = false;
 
-  bool get _four => widget.playerCount == 4;
-  int get _topSeat => _four ? 2 : 1;
-
-  /// The seat whose turn it is, or null when the round is over.
-  int? get _turnSeat => _round.isOver ? null : _round.turn;
+  late final SoundService _sound;
 
   @override
   void initState() {
     super.initState();
-    _round = _roundFromSetup(
-      Dealer.dealFirstRound(widget.playerCount, _random),
-    );
-    _advance();
+    WidgetsBinding.instance.addObserver(this);
+    _sound = ref.read(soundServiceProvider);
+    _sound.startCafeAmbient();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _sound.pauseCafeAmbient();
+    } else if (state == AppLifecycleState.resumed) {
+      _sound.resumeCafeAmbient();
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _turnTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _sound.stopCafeAmbient();
+    for (final (entry, controller) in _activeFlights) {
+      entry.remove();
+      controller.dispose();
+    }
+    _activeFlights.clear();
     super.dispose();
   }
 
-  RoundState _roundFromSetup(RoundSetup setup) => RoundState(
-    playerCount: widget.playerCount,
-    hands: setup.hands,
-    boneyard: setup.boneyard,
-    startSeat: setup.startSeat,
-    openingPiece: setup.startPiece,
-  );
+  bool get _four => widget.playerCount == 4;
+  int get _topSeat => _four ? 2 : 1;
+  MatchArgs get _matchArgs =>
+      (playerCount: widget.playerCount, rules: widget.rules);
+
+  MatchController get _controller =>
+      ref.read(matchControllerProvider(_matchArgs).notifier);
+
+  MatchViewState get _currentMatch =>
+      ref.read(matchControllerProvider(_matchArgs));
 
   // ---------------------------------------------------------------------
-  // Game flow
+  // Result dialogs & developer shortcut
   // ---------------------------------------------------------------------
 
-  void _schedule(Duration delay, VoidCallback action) {
-    _timer?.cancel();
-    _timer = Timer(delay, () {
-      if (mounted) action();
-    });
-  }
+  Future<void> _showResult(MatchViewState match) async {
+    if (!match.isMatchOver || _dialogOpen) return;
+    _dialogOpen = true;
 
-  /// Decides what happens now that the turn belongs to a new player.
-  /// Call it inside setState (it only changes fields and starts timers).
-  void _advance() {
-    _timer?.cancel();
-    _turnTimer?.cancel();
-    _myMoves = const [];
-
-    if (_round.isOver) {
-      _schedule(_resultDelay, _showResult);
-      return;
-    }
-
-    // Legal moves are computed ONLY for the player whose turn it is,
-    // because the hands change after every move.
-    final seat = _round.turn;
-    final moves = _round.legalMoves();
-
-    if (moves.isEmpty) {
-      // No legal move: it happens automatically, nobody presses a button.
-      final canDraw = _round.playerCount == 2 && _round.boneyard.isNotEmpty;
-      _status = (
-        seat: seat,
-        kind: canDraw
-            ? _StatusKind.draws
-            : (_four ? _StatusKind.noTiles : _StatusKind.passes),
+    try {
+      final playAgain = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _MatchResultDialog(
+          weWon: match.matchWinnerTeam == 0,
+          ourTotal: match.scores[0],
+          theirTotal: match.scores[1],
+          targetScore: widget.rules.targetScore,
+        ),
       );
-      _schedule(canDraw ? _drawDelay : _passDelay, _resolveNoMoves);
-      return;
-    }
-
-    _status = null;
-    if (seat == 0) {
-      _myMoves = moves;
-      _startTurnTimer();
-    } else {
-      _schedule(_aiDelay, () => _aiPlay(moves));
-    }
-  }
-
-  /// Starts the countdown of your turn.
-  void _startTurnTimer() {
-    _turnTimer?.cancel();
-    _secondsLeft = _turnSeconds;
-    _turnTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() => _secondsLeft--);
-      if (_secondsLeft <= 0) {
-        timer.cancel();
-        _autoPlayForMe();
-      }
-    });
-  }
-
-  /// Time is up: the computer plays a legal move for you.
-  /// PROTOTYPE: random move. The real AI comes in Phase 5.
-  void _autoPlayForMe() {
-    if (_round.isOver || _round.turn != 0 || _myMoves.isEmpty) return;
-    final move = _myMoves[_random.nextInt(_myMoves.length)];
-    setState(() {
-      _clearInteraction();
-      _round.play(move);
-      _advance();
-    });
-  }
-
-  /// The current player has no move: draw (two players) or pass.
-  void _resolveNoMoves() {
-    setState(() {
-      if (_round.playerCount == 2 && _round.boneyard.isNotEmpty) {
-        _round.draw();
+      if (!mounted) return;
+      if (playAgain == true) {
+        setState(_clearInteraction);
+        _controller.resetMatch();
       } else {
-        _round.pass();
+        Navigator.of(context).pop();
       }
-      _advance();
-    });
-  }
-
-  /// PROTOTYPE: the computer plays a random legal move.
-  /// The real AI comes in Phase 5.
-  void _aiPlay(List<Move> moves) {
-    final move = moves[_random.nextInt(moves.length)];
-    setState(() {
-      _round.play(move);
-      _advance();
-    });
-  }
-
-  Future<void> _showResult() async {
-    final result = _round.result;
-    if (result == null) return;
-
-    setState(() {
-      final team = result.winnerTeam;
-      if (team != null) _scores[team] += result.points;
-      _status = null;
-    });
-
-    await showRoundResultDialog(
-      context,
-      kind: result.kind,
-      weWon: result.winnerTeam == 0,
-      points: result.points,
-      ourTotal: _scores[0],
-      theirTotal: _scores[1],
-    );
-    if (!mounted) return;
-    _startNextRound(result);
-  }
-
-  /// A burned round is dealt like a first round. After a win, the winner
-  /// starts and may open with any piece.
-  void _startNextRound(RoundResult last) {
-    setState(() {
-      _clearInteraction();
-      final winner = last.winnerSeat;
-      if (last.kind == RoundEndKind.burned || winner == null) {
-        _round = _roundFromSetup(
-          Dealer.dealFirstRound(widget.playerCount, _random),
-        );
-      } else {
-        final dealt = Dealer.deal(widget.playerCount, _random);
-        _round = RoundState(
-          playerCount: widget.playerCount,
-          hands: dealt.hands,
-          boneyard: dealt.boneyard,
-          startSeat: winner,
-        );
-      }
-      _advance();
-    });
+    } finally {
+      _dialogOpen = false;
+    }
   }
 
   /// Developer shortcut: deal a fresh first round.
   void _redeal() {
-    setState(() {
-      _clearInteraction();
-      _round = _roundFromSetup(
-        Dealer.dealFirstRound(widget.playerCount, _random),
-      );
-      _advance();
-    });
+    setState(_clearInteraction);
+    _controller.redeal();
   }
 
   // ---------------------------------------------------------------------
@@ -287,35 +157,85 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   void _clearInteraction() {
     _dragging = null;
+    _returningPiece = null;
+    _flyingToBoard = null;
     _selected = null;
     _hoverEnd = null;
   }
 
-  bool _isPlayable(DominoPiece piece) =>
-      _myMoves.any((move) => move.piece == piece);
+  /// Launches a smooth flight from [fromCenter] to the board slot for [end].
+  void _flyToBoard({
+    required DominoPiece piece,
+    required BoardEnd end,
+    required TileSkin skin,
+    required Offset fromCenter,
+    required double fromWidth,
+    required Duration duration,
+  }) {
+    final key = end == BoardEnd.left ? _leftSlotKey : _rightSlotKey;
+    final targetBox = key.currentContext?.findRenderObject();
+    if (targetBox is! RenderBox || !targetBox.attached) {
+      setState(_clearInteraction);
+      _controller.playHumanMove(piece, end);
+      return;
+    }
 
-  List<BoardEnd> _endsFor(DominoPiece piece) => [
-    for (final move in _myMoves)
-      if (move.piece == piece) move.end,
-  ];
+    final targetCenter = targetBox.localToGlobal(
+      targetBox.size.center(Offset.zero),
+    );
+    final targetWidth = math.min(targetBox.size.width, targetBox.size.height);
 
-  void _playMine(DominoPiece piece, BoardEnd end) {
-    final move = Move(piece, end);
-    if (_round.turn != 0 || !_myMoves.contains(move)) return;
     setState(() {
-      _clearInteraction();
-      _round.play(move);
-      _advance();
+      _dragging = null;
+      _selected = null;
+      _hoverEnd = null;
+      _flyingToBoard = piece;
     });
+
+    _flyOverlayTile(
+      piece: piece,
+      skin: skin,
+      fromCenter: fromCenter,
+      targetCenter: () => targetCenter,
+      fromWidth: fromWidth,
+      toWidth: targetWidth,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      onDone: () {
+        setState(() {
+          if (_flyingToBoard == piece) _flyingToBoard = null;
+        });
+        _controller.playHumanMove(piece, end);
+      },
+    );
+  }
+
+  void _playMine(DominoPiece piece, BoardEnd end, TileSkin skin) {
+    final handKey = _handKeys[piece];
+    final fromCenter = handKey == null ? null : _slotCenter(handKey);
+    if (fromCenter == null) {
+      setState(_clearInteraction);
+      _controller.playHumanMove(piece, end);
+      return;
+    }
+    _flyToBoard(
+      piece: piece,
+      end: end,
+      skin: skin,
+      fromCenter: fromCenter,
+      fromWidth: _lastHandTileWidth,
+      duration: const Duration(milliseconds: 260),
+    );
   }
 
   /// Tap: one possible end plays at once; two ends select the piece and
   /// show both places, then you tap the place you want.
-  void _onTapPiece(DominoPiece piece) {
-    final ends = _endsFor(piece);
+  void _onTapPiece(DominoPiece piece, TileSkin skin) {
+    if (_flyingToBoard != null) return;
+    final ends = _currentMatch.endsFor(piece);
     if (ends.isEmpty) return;
     if (ends.length == 1) {
-      _playMine(piece, ends.first);
+      _playMine(piece, ends.first, skin);
       return;
     }
     setState(() => _selected = _selected == piece ? null : piece);
@@ -324,24 +244,127 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   void _onDragStarted(DominoPiece piece) {
     setState(() {
       _dragging = piece;
+      _returningPiece = null;
       _selected = null;
       _hoverEnd = null;
     });
   }
 
-  void _onDragEnd() {
-    if (!mounted) return;
-    if (_dragging != null || _hoverEnd != null) {
-      setState(() {
-        _dragging = null;
-        _hoverEnd = null;
-      });
+  /// Smoothly flies a borderless [DominoTile] in the overlay from [fromCenter]
+  /// to [targetCenter] (queried live each frame so it tracks opening slots).
+  void _flyOverlayTile({
+    required DominoPiece piece,
+    required TileSkin skin,
+    required Offset fromCenter,
+    required Offset? Function() targetCenter,
+    required double fromWidth,
+    required double toWidth,
+    required Duration duration,
+    Curve curve = Curves.easeOutCubic,
+    required VoidCallback onDone,
+  }) {
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) {
+      onDone();
+      return;
     }
+
+    final controller = AnimationController(vsync: this, duration: duration);
+    final curved = CurvedAnimation(parent: controller, curve: curve);
+    var lastTarget = fromCenter;
+
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => IgnorePointer(
+        child: AnimatedBuilder(
+          animation: curved,
+          builder: (_, _) {
+            final liveTarget = targetCenter();
+            if (liveTarget != null) lastTarget = liveTarget;
+            final t = curved.value;
+            final center = Offset.lerp(fromCenter, lastTarget, t)!;
+            final w = fromWidth + (toWidth - fromWidth) * t;
+            final h = w * 2;
+            final shadowAlpha = (1 - t) * 0.45;
+
+            return Stack(
+              children: [
+                Positioned(
+                  left: center.dx - w / 2,
+                  top: center.dy - h / 2,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(w * 0.16),
+                      boxShadow: shadowAlpha > 0.01
+                          ? [
+                              BoxShadow(
+                                color: Color.fromRGBO(0, 0, 0, shadowAlpha),
+                                blurRadius: 12 * (1 - t) + 2,
+                                offset: Offset(0, 6 * (1 - t)),
+                              ),
+                            ]
+                          : const [],
+                    ),
+                    child: DominoTile(
+                      top: piece.low,
+                      bottom: piece.high,
+                      width: w,
+                      skin: skin,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+
+    final record = (entry, controller);
+    _activeFlights.add(record);
+    overlay.insert(entry);
+
+    controller.forward().whenComplete(() {
+      _activeFlights.remove(record);
+      entry.remove();
+      controller.dispose();
+      if (mounted) onDone();
+    });
+  }
+
+  /// Drag released outside the board: open the slot smoothly and fly the tile
+  /// straight back into it with zero flicker.
+  void _onDragCanceled(DominoPiece piece, Offset releaseOffset, TileSkin skin) {
+    if (!mounted) return;
+    final fromCenter =
+        releaseOffset + const Offset(_feedbackWidth / 2, _feedbackWidth);
+    final key = _handKeys[piece];
+
+    setState(() {
+      _dragging = null;
+      _hoverEnd = null;
+      _returningPiece = piece;
+    });
+
+    _flyOverlayTile(
+      piece: piece,
+      skin: skin,
+      fromCenter: fromCenter,
+      targetCenter: () => key == null ? null : _slotCenter(key),
+      fromWidth: _feedbackWidth,
+      toWidth: _lastHandTileWidth,
+      duration: const Duration(milliseconds: 220),
+      onDone: () {
+        if (_returningPiece == piece) {
+          setState(() => _returningPiece = null);
+        }
+      },
+    );
   }
 
   /// While dragging over the board: light the end nearest to the tile.
   void _onDragMove(DragTargetDetails<DominoPiece> details) {
-    final ends = _endsFor(details.data);
+    final ends = _currentMatch.endsFor(details.data);
     if (ends.isEmpty) return;
     final end = ends.length == 1
         ? ends.first
@@ -350,7 +373,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   void _onDrop(DragTargetDetails<DominoPiece> details) {
-    final ends = _endsFor(details.data);
+    final piece = details.data;
+    final ends = _currentMatch.endsFor(piece);
     if (ends.isEmpty) return;
     final hover = _hoverEnd;
     final end = (hover != null && ends.contains(hover))
@@ -358,7 +382,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         : (ends.length == 1
               ? ends.first
               : _nearestEnd(_dragPoint(details), ends));
-    _playMine(details.data, end);
+
+    setState(_clearInteraction);
+    _controller.playHumanMove(piece, end);
   }
 
   /// The center of the dragged tile on the screen.
@@ -402,9 +428,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     };
   }
 
-  String _startMessage(AppLocalizations l10n) {
-    final seat = _round.startSeat;
-    final forced = _round.openingPiece;
+  String _startMessage(AppLocalizations l10n, MatchViewState match) {
+    final seat = match.startSeat;
+    final forced = match.openingPiece;
     if (forced != null) {
       return seat == 0
           ? l10n.youStartRound('$forced')
@@ -415,13 +441,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         : l10n.otherStartsRoundFree(_seatName(l10n, seat));
   }
 
-  String _statusText(AppLocalizations l10n) {
-    final status = _status!;
+  String _statusText(AppLocalizations l10n, MatchViewState match) {
+    final status = match.status!;
     final name = _seatName(l10n, status.seat);
     return switch (status.kind) {
-      _StatusKind.noTiles => l10n.saysNoTiles(name),
-      _StatusKind.passes => l10n.passesTurn(name),
-      _StatusKind.draws => l10n.drawsTile(name),
+      MatchStatusKind.noTiles => l10n.saysNoTiles(name),
+      MatchStatusKind.passes => l10n.passesTurn(name),
+      MatchStatusKind.draws => l10n.drawsTile(name),
     };
   }
 
@@ -429,38 +455,79 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   // Build
   // ---------------------------------------------------------------------
 
+  Future<void> _showRoundHistory(MatchViewState match) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => _RoundHistoryDialog(
+        history: match.history,
+        ourTotal: match.scores[0],
+        theirTotal: match.scores[1],
+        fourPlayers: _four,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(settingsProvider);
     final skin = TileSkin.byId(settings.tileSkinId);
+    final match = ref.watch(matchControllerProvider(_matchArgs));
+
+    ref.listen<MatchViewState>(matchControllerProvider(_matchArgs), (
+      prev,
+      next,
+    ) {
+      if (prev?.turnSeat != next.turnSeat && next.turnSeat != 0) {
+        if (_dragging != null || _selected != null || _hoverEnd != null) {
+          setState(_clearInteraction);
+        }
+      }
+      if (next.showResultPending && !(prev?.showResultPending ?? false)) {
+        _showResult(next);
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_four ? l10n.modeFourPlayers : l10n.modeTwoPlayers),
+        toolbarHeight: 40,
+        title: Text(
+          _four ? l10n.modeFourPlayers : l10n.modeTwoPlayers,
+          style: const TextStyle(fontSize: 16),
+        ),
         actions: [
           // Developer shortcut: hidden in release builds.
           if (!kReleaseMode)
             IconButton(
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh, size: 20),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               tooltip: l10n.redeal,
               onPressed: _redeal,
             ),
         ],
       ),
-      body: WoodTable(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.1),
+            radius: 1.05,
+            colors: [
+              Color(0xFF281810),
+              Color(0xFF170E09),
+              Color(0xFF0C0704),
+            ],
+            stops: [0.0, 0.55, 1.0],
+          ),
+        ),
         child: SafeArea(
+          left: false,
+          right: false,
+          bottom: false,
           child: Column(
             children: [
-              ScoreBoard(
-                ourLabel: _four ? l10n.teamUs : l10n.playerYou,
-                theirLabel: _four ? l10n.teamThem : l10n.opponentSingle,
-                ourScore: _scores[0],
-                theirScore: _scores[1],
-                targetScore: widget.rules.targetScore,
-              ),
-              Expanded(child: _buildTableArea(l10n, skin)),
-              _buildBottomArea(l10n, skin),
+              Expanded(child: _buildTableArea(l10n, skin, match)),
+              _buildBottomArea(l10n, skin, match),
             ],
           ),
         ),
@@ -468,171 +535,246 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-  /// The middle part: a SQUARE framed board, with the other players around
+  /// The middle part: a framed board, with the other players around
   /// it (top player above, side players beside it with four players).
   ///
   /// All positions here are physical (left/right of the screen) on purpose:
   /// seating must not flip with the language direction.
-  Widget _buildTableArea(AppLocalizations l10n, TileSkin skin) {
-    final topCount = _round.hands[_topSeat].length;
+  Widget _buildTableArea(
+    AppLocalizations l10n,
+    TileSkin skin,
+    MatchViewState match,
+  ) {
+    final topCount = match.hands[_topSeat].length;
 
     return LayoutBuilder(
       builder: (context, box) {
-        final sideSlot = _four ? _sideSlotWidth : 0.0;
+        final topReserve = (box.maxHeight * 0.21).clamp(76.0, 112.0);
+        final sideSlot = _four
+            ? (box.maxWidth * 0.13).clamp(38.0, 56.0)
+            : 0.0;
+        final horizontalGap = _four
+            ? (box.maxWidth * 0.02).clamp(5.0, 10.0)
+            : (box.maxWidth * 0.055).clamp(12.0, 26.0);
+        final bottomGap = (box.maxHeight * 0.015).clamp(4.0, 10.0);
 
-        // The biggest square that fits between the players.
-        final maxSide = math.min(
-          box.maxWidth - 2 * sideSlot - 2 * _squareGap,
-          box.maxHeight - _topReserve - _squareGap,
+        final boardWidth = math.max(
+          80.0,
+          box.maxWidth - 2 * sideSlot - 2 * horizontalGap,
         );
-        final side = math.max(80.0, maxSide);
+        final boardHeight = math.max(
+          80.0,
+          box.maxHeight - topReserve - bottomGap,
+        );
 
-        // Center the square horizontally; if there is spare height, center
-        // it in the space under the top player.
-        final left = (box.maxWidth - side) / 2;
-        final spare = math.max(0.0, box.maxHeight - _topReserve - side);
-        final top = _topReserve + spare / 2;
+        final left = (box.maxWidth - boardWidth) / 2;
+        final top = topReserve;
 
         return Stack(
           clipBehavior: Clip.none,
           children: [
             // Top player: the partner (4 players) or the opponent (2).
-            Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 4,
+              height: topReserve - 6,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topCenter,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     PlayerChip(
                       name: _seatName(l10n, _topSeat),
                       tileCount: topCount,
-                      isTurn: _turnSeat == _topSeat,
+                      isTurn: match.turnSeat == _topSeat,
                     ),
-                    const SizedBox(height: 8),
-                    HiddenHand(count: topCount, skin: skin, tileWidth: 12),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _PlayerScoreBadge(
+                          score:
+                              match.scores[RoundState.teamOf(
+                                _topSeat,
+                                widget.playerCount,
+                              )],
+                          target: widget.rules.targetScore,
+                          compact: true,
+                        ),
+                        const SizedBox(width: 6),
+                        _TileRack(
+                          pieces: match.hands[_topSeat],
+                          revealed: match.revealingRound,
+                          skin: skin,
+                          tileWidth: 14,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
 
-            // The square board.
+            // The framed board.
             Positioned(
               left: left,
               top: top,
-              width: side,
-              height: side,
-              child: _buildBoardZone(l10n, skin),
+              width: boardWidth,
+              height: boardHeight,
+              child: _buildBoardZone(l10n, skin, match),
             ),
 
-            // Side players (4 players only), each in its own fixed-width
-            // slot next to the square, so their names are never cut off.
+            // Side players (4 players only), anchored to the left and right
+            // edges of the screen with their tile racks emerging from the edge.
             if (_four)
               Positioned(
-                left: math.max(0.0, left - sideSlot),
+                left: 0,
                 top: top,
                 width: sideSlot,
-                height: side,
-                child: Center(
+                height: boardHeight,
+                child: Align(
+                  alignment: Alignment.centerLeft,
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
                     child: _SidePlayer(
                       name: _seatName(l10n, 3),
-                      tileCount: _round.hands[3].length,
-                      isTurn: _turnSeat == 3,
+                      pieces: match.hands[3],
+                      revealed: match.revealingRound,
+                      isTurn: match.turnSeat == 3,
+                      score:
+                          match.scores[RoundState.teamOf(3, widget.playerCount)],
+                      target: widget.rules.targetScore,
                       skin: skin,
+                      alignLeft: true,
                     ),
                   ),
                 ),
               ),
             if (_four)
               Positioned(
-                left: math.min(box.maxWidth - sideSlot, left + side),
+                right: 0,
                 top: top,
                 width: sideSlot,
-                height: side,
-                child: Center(
+                height: boardHeight,
+                child: Align(
+                  alignment: Alignment.centerRight,
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
                     child: _SidePlayer(
                       name: _seatName(l10n, 1),
-                      tileCount: _round.hands[1].length,
-                      isTurn: _turnSeat == 1,
+                      pieces: match.hands[1],
+                      revealed: match.revealingRound,
+                      isTurn: match.turnSeat == 1,
+                      score:
+                          match.scores[RoundState.teamOf(1, widget.playerCount)],
+                      target: widget.rules.targetScore,
                       skin: skin,
+                      alignLeft: false,
                     ),
                   ),
                 ),
               ),
 
-            // 2 players: how many pieces are left in the draw pile.
+            // 2 players: how many pieces are left in the draw pile (14/14).
             if (!_four)
-              Align(
-                alignment: Alignment.topLeft,
+              Positioned(
+                left: 10,
+                top: 10,
                 child: IgnorePointer(
-                  child: Container(
-                    margin: const EdgeInsets.fromLTRB(10, 10, 0, 0),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xCC1D110A),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      l10n.boneyardCount(_round.boneyard.length),
-                      style: const TextStyle(
-                        color: AppColors.ivory,
-                        fontSize: 13,
-                      ),
-                    ),
+                  child: _TopInfoPill(
+                    icon: Icons.layers_rounded,
+                    label: '${match.boneyardCount}/$_initialBoneyardCount',
                   ),
                 ),
               ),
+
+            // Round-by-round score log.
+            Positioned(
+              right: 10,
+              top: 10,
+              child: _TopInfoPill(
+                icon: Icons.receipt_long_rounded,
+                onTap: () => _showRoundHistory(match),
+              ),
+            ),
           ],
         );
       },
     );
   }
 
-  /// The framed square. Its inside is the line of play and the drop zone.
-  Widget _buildBoardZone(AppLocalizations l10n, TileSkin skin) {
+  /// The framed board. Its inside is the line of play and the drop zone.
+  Widget _buildBoardZone(
+    AppLocalizations l10n,
+    TileSkin skin,
+    MatchViewState match,
+  ) {
     return BoardFrame(
       child: Stack(
         children: [
           Positioned.fill(
             child: DragTarget<DominoPiece>(
-              onWillAcceptWithDetails: (details) => _isPlayable(details.data),
+              onWillAcceptWithDetails: (details) =>
+                  match.isPlayable(details.data),
               onMove: _onDragMove,
               onLeave: (_) {
                 if (_hoverEnd != null) setState(() => _hoverEnd = null);
               },
               onAcceptWithDetails: _onDrop,
               builder: (context, candidates, rejected) =>
-                  SizedBox.expand(child: _buildBoard(l10n, skin)),
+                  SizedBox.expand(child: _buildBoard(l10n, skin, match)),
             ),
           ),
-          if (_status != null)
+          if (match.awaitingHumanDraw)
+            Center(
+              child: _BoneyardDrawBoard(
+                slots: match.boneyardSlots,
+                skin: skin,
+                onPick: _controller.drawHumanTile,
+              ),
+            ),
+          if (match.revealingRound && match.roundResult != null)
+            Center(
+              child: IgnorePointer(
+                child: _RoundTallyBadge(
+                  result: match.roundResult!,
+                  fourPlayers: _four,
+                ),
+              ),
+            ),
+          if (match.status != null)
             Align(
               alignment: Alignment.bottomCenter,
-              child: IgnorePointer(child: _StatusPill(text: _statusText(l10n))),
+              child: IgnorePointer(
+                child: _StatusPill(text: _statusText(l10n, match)),
+              ),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildBoard(AppLocalizations l10n, TileSkin skin) {
+  Widget _buildBoard(
+    AppLocalizations l10n,
+    TileSkin skin,
+    MatchViewState match,
+  ) {
     final ghost = _dragging ?? _selected;
-    if (_round.board.isEmpty && ghost == null) {
-      return Center(child: _BoardPlaceholder(message: _startMessage(l10n)));
+    if (match.board.isEmpty && ghost == null) {
+      return Center(
+        child: _BoardPlaceholder(message: _startMessage(l10n, match)),
+      );
     }
-    final active = ghost == null ? const <BoardEnd>[] : _endsFor(ghost);
+    final active = ghost == null ? const <BoardEnd>[] : match.endsFor(ghost);
     final hover = _hoverEnd;
     final selected = _selected;
 
     return BoardView(
-      board: _round.board,
+      board: match.board,
       skin: skin,
       leftKey: _leftSlotKey,
       rightKey: _rightSlotKey,
@@ -640,71 +782,187 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       activeEnds: active,
       // Dragging: only the nearest end is lit. Tap selection: all are lit.
       litEnds: _dragging != null ? {?hover} : active.toSet(),
-      onSlotTap: selected == null ? null : (end) => _playMine(selected, end),
+      lastPlacedPiece: match.lastPlayedPiece,
+      onSlotTap: selected == null
+          ? null
+          : (end) => _playMine(selected, end, skin),
     );
   }
 
-  /// The bottom part: your card and your hand.
-  Widget _buildBottomArea(AppLocalizations l10n, TileSkin skin) {
-    final myHand = [..._round.hands[0]]..sort();
-    final myTurn = _turnSeat == 0;
-    final timerOn = myTurn && _myMoves.isNotEmpty;
+  /// The bottom part: your hand rack and your card.
+  Widget _buildBottomArea(
+    AppLocalizations l10n,
+    TileSkin skin,
+    MatchViewState match,
+  ) {
+    final myHand = [...match.hands[0]]..sort();
+    final myTurn = match.turnSeat == 0;
+    final timerOn = myTurn && match.myMoves.isNotEmpty;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final compactBottom = screenHeight < 640;
+    final maxTileByHeight = (screenHeight * 0.05).clamp(24.0, 38.0);
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(
+        8,
+        compactBottom ? 6 : 8,
+        8,
+        (compactBottom ? 4 : 6) + bottomInset,
+      ),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF21130C), Color(0xFF110905)],
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        border: Border(
+          top: BorderSide(
+            color: AppColors.gold.withValues(alpha: 0.4),
+            width: 1.2,
+          ),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0xAA000000),
+            blurRadius: 16,
+            offset: Offset(0, -3),
+          ),
+        ],
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          PlayerChip(
-            name: l10n.playerYou,
-            tileCount: myHand.length,
-            isTurn: myTurn,
-            secondsLeft: timerOn ? _secondsLeft : null,
-            secondsTotal: _turnSeconds,
-          ),
-          const SizedBox(height: 4),
-          // One row that scrolls sideways, so any number of tiles can be
-          // reached. The tile size never changes with the number of tiles.
+          // Player's hand inside a 7-tile board-like rack; extra tiles clip
+          // cleanly at both ends and can be reached by horizontal scrolling.
           LayoutBuilder(
             builder: (context, constraints) {
-              final tileWidth = math.min(48.0, (constraints.maxWidth - 68) / 7);
-              return SizedBox(
-                height: tileWidth * 2 + 32,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 18, 12, 14),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (final piece in myHand)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 3,
+              final tileWidth = math
+                  .min(maxTileByHeight, (constraints.maxWidth - 76) / 7)
+                  .clamp(22.0, 38.0);
+              _lastHandTileWidth = tileWidth;
+              const rackPadH = 8.0;
+              final rackWidth = math.min(
+                constraints.maxWidth,
+                7 * (tileWidth + 6) + rackPadH * 2 + 2,
+              );
+              final rackInnerWidth = math.max(0.0, rackWidth - 2);
+
+              return Container(
+                width: rackWidth,
+                height: tileWidth * 2 + 26,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFF2B190E), Color(0xFF170D07)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.gold.withValues(alpha: 0.5),
+                    width: 1.2,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x80000000),
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(11),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: rackInnerWidth),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          rackPadH,
+                          16,
+                          rackPadH,
+                          6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (final piece in myHand)
+                              AnimatedContainer(
+                                key: ValueKey(piece),
+                                duration: const Duration(milliseconds: 240),
+                                curve: Curves.easeOutCubic,
+                                width:
+                                    (_dragging == piece ||
+                                        _flyingToBoard == piece)
+                                    ? 0
+                                    : tileWidth + 6,
+                                alignment: Alignment.center,
+                                clipBehavior: Clip.hardEdge,
+                                decoration: const BoxDecoration(),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                  ),
+                                  child: KeyedSubtree(
+                                    key: _handKeys.putIfAbsent(
+                                      piece,
+                                      GlobalKey.new,
+                                    ),
+                                    child: _HandTile(
+                                      piece: piece,
+                                      width: tileWidth,
+                                      feedbackWidth: _feedbackWidth,
+                                      skin: skin,
+                                      playable: match.isPlayable(piece),
+                                      dimmed:
+                                          myTurn && !match.isPlayable(piece),
+                                      selected: _selected == piece,
+                                      hidden: _returningPiece == piece,
+                                      onTap: () => _onTapPiece(piece, skin),
+                                      onDragStarted: () =>
+                                          _onDragStarted(piece),
+                                      onDragCanceled: (offset) =>
+                                          _onDragCanceled(piece, offset, skin),
+                                    ),
+                                  ),
+                                ),
                               ),
-                              child: _HandTile(
-                                piece: piece,
-                                width: tileWidth,
-                                feedbackWidth: _feedbackWidth,
-                                skin: skin,
-                                playable: _isPlayable(piece),
-                                dimmed: myTurn && !_isPlayable(piece),
-                                selected: _selected == piece,
-                                onTap: () => _onTapPiece(piece),
-                                onDragStarted: () => _onDragStarted(piece),
-                                onDragEnd: _onDragEnd,
-                              ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               );
             },
+          ),
+          SizedBox(height: compactBottom ? 4 : 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                PlayerChip(
+                  name: l10n.playerYou,
+                  tileCount: myHand.length,
+                  isTurn: myTurn,
+                  secondsLeft: timerOn ? match.secondsLeft : null,
+                  secondsTotal: match.turnSeconds,
+                  compact: compactBottom,
+                ),
+                const SizedBox(width: 8),
+                _PlayerScoreBadge(
+                  score: match.scores[0],
+                  target: widget.rules.targetScore,
+                  compact: compactBottom,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -723,9 +981,10 @@ class _HandTile extends StatelessWidget {
     required this.playable,
     required this.dimmed,
     required this.selected,
+    required this.hidden,
     required this.onTap,
     required this.onDragStarted,
-    required this.onDragEnd,
+    required this.onDragCanceled,
   });
 
   final DominoPiece piece;
@@ -735,9 +994,10 @@ class _HandTile extends StatelessWidget {
   final bool playable;
   final bool dimmed;
   final bool selected;
+  final bool hidden;
   final VoidCallback onTap;
   final VoidCallback onDragStarted;
-  final VoidCallback onDragEnd;
+  final void Function(Offset offset) onDragCanceled;
 
   @override
   Widget build(BuildContext context) {
@@ -748,7 +1008,7 @@ class _HandTile extends StatelessWidget {
       skin: skin,
     );
 
-    if (playable) {
+    if (playable && !hidden) {
       tile = DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(width * 0.16),
@@ -764,12 +1024,23 @@ class _HandTile extends StatelessWidget {
       );
     }
 
-    // A selected tile (two possible ends) rises a little.
-    tile = AnimatedSlide(
-      offset: selected ? const Offset(0, -0.12) : Offset.zero,
-      duration: const Duration(milliseconds: 150),
-      child: tile,
+    // A selected tile (two possible ends) rises cleanly inside the rack
+    // without clipping.
+    tile = AnimatedScale(
+      scale: selected ? 1.05 : 1.0,
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
+      child: AnimatedSlide(
+        offset: selected ? const Offset(0, -0.06) : Offset.zero,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        child: tile,
+      ),
     );
+
+    if (hidden) {
+      tile = Opacity(opacity: 0, child: tile);
+    }
 
     if (!playable) {
       return AnimatedOpacity(
@@ -785,16 +1056,28 @@ class _HandTile extends StatelessWidget {
       // Only an upward/downward drag starts the drag-and-drop, so a
       // sideways swipe still scrolls the hand.
       affinity: Axis.vertical,
-      feedback: DominoTile(
-        top: piece.low,
-        bottom: piece.high,
-        width: feedbackWidth,
-        skin: skin,
+      feedback: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(feedbackWidth * 0.16),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x88000000),
+              blurRadius: 14,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: DominoTile(
+          top: piece.low,
+          bottom: piece.high,
+          width: feedbackWidth,
+          skin: skin,
+        ),
       ),
-      // The place stays EMPTY while the tile is in your finger.
-      childWhenDragging: SizedBox(width: width, height: width * 2),
+      // Collapses smoothly via the parent AnimatedContainer while dragging.
+      childWhenDragging: const SizedBox.shrink(),
       onDragStarted: onDragStarted,
-      onDragEnd: (_) => onDragEnd(),
+      onDraggableCanceled: (_, offset) => onDragCanceled(offset),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -804,28 +1087,67 @@ class _HandTile extends StatelessWidget {
   }
 }
 
-/// A side opponent: card on top, a column of face-down tiles below it.
+/// A side opponent: compact card, score badge, and a vertical tile rack
+/// emerging from the left or right screen edge.
 class _SidePlayer extends StatelessWidget {
   const _SidePlayer({
     required this.name,
-    required this.tileCount,
+    required this.pieces,
+    required this.revealed,
     required this.isTurn,
+    required this.score,
+    required this.target,
     required this.skin,
+    required this.alignLeft,
   });
 
   final String name;
-  final int tileCount;
+  final List<DominoPiece> pieces;
+  final bool revealed;
   final bool isTurn;
+  final int score;
+  final int target;
   final TileSkin skin;
+  final bool alignLeft;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
+      textDirection: TextDirection.ltr,
+      crossAxisAlignment:
+          alignLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
       children: [
-        PlayerChip(name: name, tileCount: tileCount, isTurn: isTurn),
-        const SizedBox(height: 6),
-        HiddenHand(count: tileCount, skin: skin, tileWidth: 12, vertical: true),
+        Padding(
+          padding: EdgeInsets.only(
+            left: alignLeft ? 3 : 0,
+            right: alignLeft ? 0 : 3,
+          ),
+          child: PlayerChip(
+            name: name,
+            tileCount: pieces.length,
+            isTurn: isTurn,
+            compact: true,
+          ),
+        ),
+        const SizedBox(height: 3),
+        _PlayerScoreBadge(
+          score: score,
+          target: target,
+          compact: true,
+          flushLeft: alignLeft,
+          flushRight: !alignLeft,
+        ),
+        const SizedBox(height: 5),
+        _TileRack(
+          pieces: pieces,
+          revealed: revealed,
+          skin: skin,
+          tileWidth: 11,
+          vertical: true,
+          flushLeft: alignLeft,
+          flushRight: !alignLeft,
+        ),
       ],
     );
   }
@@ -880,6 +1202,621 @@ class _StatusPill extends StatelessWidget {
           color: AppColors.ivory,
           fontSize: 13,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact score badge shown beside a player's chip (e.g. 23/151).
+class _PlayerScoreBadge extends StatelessWidget {
+  const _PlayerScoreBadge({
+    required this.score,
+    required this.target,
+    this.compact = false,
+    this.flushLeft = false,
+    this.flushRight = false,
+  });
+
+  final int score;
+  final int target;
+  final bool compact;
+  final bool flushLeft;
+  final bool flushRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = AppColors.gold.withValues(alpha: 0.45);
+    final side = BorderSide(color: borderColor);
+    final radius = flushLeft
+        ? const BorderRadius.horizontal(right: Radius.circular(10))
+        : (flushRight
+              ? const BorderRadius.horizontal(left: Radius.circular(10))
+              : BorderRadius.circular(compact ? 10 : 12));
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 10,
+        vertical: compact ? 3 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: compact ? const Color(0xE6120905) : const Color(0xCC1D110A),
+        borderRadius: radius,
+        border: Border(
+          top: side,
+          bottom: side,
+          left: flushLeft ? BorderSide.none : side,
+          right: flushRight ? BorderSide.none : side,
+        ),
+      ),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: '$score',
+                style: TextStyle(
+                  color: AppColors.ivory,
+                  fontSize: compact ? 11.5 : 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              TextSpan(
+                text: '/$target',
+                style: TextStyle(
+                  color: AppColors.ivory.withValues(alpha: 0.7),
+                  fontSize: compact ? 9.5 : 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Board-like wooden rack holding an opponent's tiles (face-down during play,
+/// face-up when [revealed] is true at the end of a round).
+class _TileRack extends StatelessWidget {
+  const _TileRack({
+    super.key,
+    required this.pieces,
+    required this.revealed,
+    required this.skin,
+    required this.tileWidth,
+    this.vertical = false,
+    this.flushLeft = false,
+    this.flushRight = false,
+  });
+
+  final List<DominoPiece> pieces;
+  final bool revealed;
+  final TileSkin skin;
+  final double tileWidth;
+  final bool vertical;
+  final bool flushLeft;
+  final bool flushRight;
+
+  Widget _buildRevealed() {
+    final gap = tileWidth * 0.18;
+    final children = <Widget>[];
+    for (var i = 0; i < pieces.length; i++) {
+      if (i > 0) {
+        children.add(
+          SizedBox(width: vertical ? 0 : gap, height: vertical ? gap : 0),
+        );
+      }
+      final p = pieces[i];
+      children.add(
+        DominoTile(
+          top: p.low,
+          bottom: p.high,
+          width: tileWidth,
+          horizontal: vertical,
+          skin: skin,
+        ),
+      );
+    }
+    return Flex(
+      direction: vertical ? Axis.vertical : Axis.horizontal,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = AppColors.gold.withValues(alpha: revealed ? 0.85 : 0.45);
+    final side = BorderSide(color: borderColor, width: 1.2);
+    final radius = flushLeft
+        ? const BorderRadius.horizontal(right: Radius.circular(10))
+        : (flushRight
+              ? const BorderRadius.horizontal(left: Radius.circular(10))
+              : BorderRadius.circular(10));
+
+    // Reserve 7 slots so the rack stays a steady size as tiles are played.
+    final sevenSpan = 7 * tileWidth + 6 * (tileWidth * 0.18);
+
+    return Container(
+      constraints: BoxConstraints(
+        minWidth: vertical ? 0 : sevenSpan + 12,
+        minHeight: vertical ? sevenSpan + 10 : tileWidth * 2 + 8,
+      ),
+      padding: EdgeInsets.fromLTRB(
+        flushLeft ? 0 : (vertical ? 4 : 6),
+        vertical ? 5 : 4,
+        flushRight ? 0 : (vertical ? 4 : 6),
+        vertical ? 5 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xCC120A06),
+        borderRadius: radius,
+        border: Border(
+          top: side,
+          bottom: side,
+          left: flushLeft ? BorderSide.none : side,
+          right: flushRight ? BorderSide.none : side,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      alignment: vertical
+          ? Alignment.topCenter
+          : AlignmentDirectional.centerEnd,
+      child: pieces.isEmpty
+          ? SizedBox(
+              width: tileWidth * 2,
+              height: tileWidth * 2,
+            )
+          : FittedBox(
+              fit: BoxFit.scaleDown,
+              child: revealed
+                  ? _buildRevealed()
+                  : HiddenHand(
+                      count: pieces.length,
+                      skin: skin,
+                      tileWidth: tileWidth,
+                      vertical: vertical,
+                    ),
+            ),
+    );
+  }
+}
+
+/// Wooden 2-row boneyard drawing table shown in 2-player mode when seat 0 must
+/// pick a tile. Tapped tiles vanish from their slot and appear in the player's
+/// hand rack below.
+class _BoneyardDrawBoard extends StatelessWidget {
+  const _BoneyardDrawBoard({
+    required this.slots,
+    required this.skin,
+    required this.onPick,
+  });
+
+  final List<DominoPiece?> slots;
+  final TileSkin skin;
+  final void Function(int slotIndex) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xF26B4528), Color(0xF52C190C)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppColors.gold.withValues(alpha: 0.75),
+            width: 1.5,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0xCC000000),
+              blurRadius: 18,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final tileWidth = ((constraints.maxWidth - 42) / 7).clamp(
+              18.0,
+              32.0,
+            );
+            final tileHeight = tileWidth * 2;
+
+            Widget buildRow(int start, int end) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = start; i < end && i < slots.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: slots[i] == null
+                          ? Container(
+                              width: tileWidth,
+                              height: tileHeight,
+                              decoration: BoxDecoration(
+                                color: const Color(0x44000000),
+                                borderRadius: BorderRadius.circular(
+                                  tileWidth * 0.16,
+                                ),
+                                border: Border.all(
+                                  color: AppColors.gold.withValues(alpha: 0.18),
+                                ),
+                              ),
+                            )
+                          : GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => onPick(i),
+                              child: DominoBack(
+                                width: tileWidth,
+                                skin: skin,
+                              ),
+                            ),
+                    ),
+                ],
+              );
+            }
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                buildRow(0, 7),
+                const SizedBox(height: 8),
+                buildRow(7, 14),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Visual points tally shown over the board at the end of a round while all
+/// remaining tiles are revealed face-up (no "round ended" text dialog).
+class _RoundTallyBadge extends StatelessWidget {
+  const _RoundTallyBadge({
+    required this.result,
+    required this.fourPlayers,
+  });
+
+  final RoundResult result;
+  final bool fourPlayers;
+
+  @override
+  Widget build(BuildContext context) {
+    final burned = result.kind == RoundEndKind.burned;
+    final weWon = result.winnerTeam == 0;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.7, end: 1.0),
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutBack,
+      builder: (context, scale, child) =>
+          Transform.scale(scale: scale, child: child),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xEE3A2515), Color(0xEE1D110A)],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: AppColors.gold.withValues(alpha: 0.85),
+            width: 1.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.gold.withValues(alpha: 0.35),
+              blurRadius: 16,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              burned
+                  ? Icons.local_fire_department_rounded
+                  : (weWon
+                        ? Icons.emoji_events_rounded
+                        : Icons.arrow_upward_rounded),
+              color: AppColors.gold,
+              size: 26,
+            ),
+            const SizedBox(width: 8),
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                burned ? '0' : '+${result.points}',
+                style: const TextStyle(
+                  color: AppColors.gold,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact pill in the top corners of the table (boneyard count, round log).
+class _TopInfoPill extends StatelessWidget {
+  const _TopInfoPill({required this.icon, this.label, this.onTap});
+
+  final IconData icon;
+  final String? label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: label == null ? 9 : 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xCC1D110A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.gold),
+          if (label != null) ...[
+            const SizedBox(width: 5),
+            Text(
+              label!,
+              style: const TextStyle(
+                color: AppColors.ivory,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (onTap == null) return content;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: content,
+    );
+  }
+}
+
+/// Dialog showing the points recorded for each completed round.
+class _RoundHistoryDialog extends StatelessWidget {
+  const _RoundHistoryDialog({
+    required this.history,
+    required this.ourTotal,
+    required this.theirTotal,
+    required this.fourPlayers,
+  });
+
+  final List<MatchRoundRecord> history;
+  final int ourTotal;
+  final int theirTotal;
+  final bool fourPlayers;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final ourLabel = fourPlayers ? l10n.teamUs : l10n.playerYou;
+    final theirLabel = fourPlayers ? l10n.teamThem : l10n.opponentSingle;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 320, maxHeight: 380),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF3A2515), Color(0xFF1D110A)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.gold.withValues(alpha: 0.6)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  color: AppColors.gold,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.totalsLine(ourTotal, theirTotal),
+                  style: const TextStyle(
+                    color: AppColors.gold,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (history.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Icon(
+                  Icons.hourglass_empty_rounded,
+                  color: AppColors.ivory,
+                  size: 28,
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: history.length,
+                  separatorBuilder: (_, _) => Divider(
+                    height: 10,
+                    color: AppColors.gold.withValues(alpha: 0.2),
+                  ),
+                  itemBuilder: (_, index) {
+                    final entry = history[index];
+                    final res = entry.result;
+                    final burned = res.kind == RoundEndKind.burned;
+                    final winner = burned
+                        ? l10n.roundBurned
+                        : (res.winnerTeam == 0 ? ourLabel : theirLabel);
+                    final pts = burned ? '0' : '+${res.points}';
+                    return Row(
+                      children: [
+                        Text(
+                          '#${entry.round}',
+                          style: TextStyle(
+                            color: AppColors.gold.withValues(alpha: 0.9),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            winner,
+                            style: const TextStyle(
+                              color: AppColors.ivory,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          pts,
+                          style: const TextStyle(
+                            color: AppColors.gold,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog shown when one side reaches [targetScore] and wins the match.
+class _MatchResultDialog extends StatelessWidget {
+  const _MatchResultDialog({
+    required this.weWon,
+    required this.ourTotal,
+    required this.theirTotal,
+    required this.targetScore,
+  });
+
+  final bool weWon;
+  final int ourTotal;
+  final int theirTotal;
+  final int targetScore;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF3A2515), Color(0xFF1D110A)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.gold.withValues(alpha: 0.7)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              weWon
+                  ? Icons.emoji_events_rounded
+                  : Icons.sentiment_dissatisfied_outlined,
+              size: 54,
+              color: AppColors.gold,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              weWon ? l10n.weWonRound : l10n.theyWonRound,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.gold,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.targetScoreLabel(targetScore),
+              style: TextStyle(
+                color: AppColors.ivory.withValues(alpha: 0.75),
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              l10n.totalsLine(ourTotal, theirTotal),
+              style: const TextStyle(
+                color: AppColors.ivory,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              child: GameButton(
+                label: l10n.play,
+                primary: true,
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: GameButton(
+                label: l10n.chooseMode,
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -96,7 +96,9 @@ class RoundState {
 
   /// Draws one piece for the current player (two players only).
   /// Allowed only when the player has no legal move.
-  DominoPiece draw() {
+  /// If [index] is provided, removes that specific piece from [boneyard];
+  /// otherwise removes the last piece.
+  DominoPiece draw([int? index]) {
     if (isOver) throw StateError('The round is over');
     if (playerCount != 2) throw StateError('Drawing is for two players only');
     if (boneyard.isEmpty) throw StateError('The draw pile is empty');
@@ -104,7 +106,9 @@ class RoundState {
       throw StateError('Cannot draw: the player has a legal move');
     }
 
-    final piece = boneyard.removeLast();
+    final piece = index != null
+        ? boneyard.removeAt(index)
+        : boneyard.removeLast();
     hands[turn].add(piece);
     return piece;
   }

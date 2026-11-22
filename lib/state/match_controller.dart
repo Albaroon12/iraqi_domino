@@ -1,0 +1,382 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/audio/sound_service.dart';
+import '../engine/board.dart';
+import '../engine/domino_piece.dart';
+import '../engine/game_rules_config.dart';
+import '../engine/match_state.dart';
+import '../engine/round_result.dart';
+
+/// Family argument identifying one match session.
+typedef MatchArgs = ({int playerCount, GameRulesConfig rules});
+
+/// Status pill kind shown when a player has no legal move.
+enum MatchStatusKind { noTiles, passes, draws }
+
+/// Immutable snapshot of a running match exposed to the UI.
+class MatchViewState {
+  const MatchViewState({
+    required this.playerCount,
+    required this.rules,
+    required this.board,
+    required this.hands,
+    required this.boneyardCount,
+    required this.boneyardSlots,
+    required this.awaitingHumanDraw,
+    required this.revealingRound,
+    required this.lastPlayedPiece,
+    required this.startSeat,
+    required this.openingPiece,
+    required this.turnSeat,
+    required this.scores,
+    required this.history,
+    required this.myMoves,
+    required this.secondsLeft,
+    required this.turnSeconds,
+    required this.status,
+    required this.roundResult,
+    required this.matchWinnerTeam,
+    required this.showResultPending,
+    required this.revision,
+  });
+
+  final int playerCount;
+  final GameRulesConfig rules;
+  final Board board;
+  final List<List<DominoPiece>> hands;
+  final int boneyardCount;
+
+  /// Fixed 14-slot boneyard layout for 2-player mode (null = already drawn).
+  final List<DominoPiece?> boneyardSlots;
+
+  /// True when seat 0 (2 players) must pick a tile from the boneyard table.
+  final bool awaitingHumanDraw;
+
+  /// True right after a round ends while all players' remaining tiles are
+  /// revealed face-up and points are tallied on screen.
+  final bool revealingRound;
+
+  /// The most recently placed piece in the current round (highlighted briefly).
+  final DominoPiece? lastPlayedPiece;
+
+  final int startSeat;
+  final DominoPiece? openingPiece;
+  final int? turnSeat;
+  final List<int> scores;
+  final List<MatchRoundRecord> history;
+  final List<Move> myMoves;
+  final int secondsLeft;
+  final int turnSeconds;
+  final ({int seat, MatchStatusKind kind})? status;
+  final RoundResult? roundResult;
+  final int? matchWinnerTeam;
+  final bool showResultPending;
+  final int revision;
+
+  bool get isFourPlayers => playerCount == 4;
+  bool get isMatchOver => matchWinnerTeam != null;
+
+  bool isPlayable(DominoPiece piece) =>
+      myMoves.any((move) => move.piece == piece);
+
+  List<BoardEnd> endsFor(DominoPiece piece) => [
+    for (final move in myMoves)
+      if (move.piece == piece) move.end,
+  ];
+}
+
+/// Riverpod controller owning one match's [MatchState], timers, and turn flow.
+class MatchController extends Notifier<MatchViewState> {
+  MatchController(this.arg);
+
+  final MatchArgs arg;
+
+  static const Duration _aiDelay = Duration(milliseconds: 900);
+  static const Duration _drawDelay = Duration(milliseconds: 700);
+  static const Duration _passDelay = Duration(milliseconds: 1300);
+  static const Duration _revealDelay = Duration(milliseconds: 3200);
+  static const int turnSeconds = 30;
+  static const int _boneyardTableSlots = 14;
+
+  final math.Random _random = math.Random();
+  late MatchState _match;
+
+  List<Move> _myMoves = const [];
+  List<DominoPiece?> _boneyardSlots = const [];
+  Timer? _timer;
+  Timer? _turnTimer;
+  int _secondsLeft = turnSeconds;
+  ({int seat, MatchStatusKind kind})? _status;
+  bool _awaitingHumanDraw = false;
+  bool _revealingRound = false;
+  DominoPiece? _lastPlayedPiece;
+  bool _showResultPending = false;
+  bool _disposed = false;
+  int _revision = 0;
+
+  @override
+  MatchViewState build() {
+    _disposed = false;
+    ref.onDispose(() {
+      _disposed = true;
+      _cancelTimers();
+    });
+
+    _match = MatchState(
+      playerCount: arg.playerCount,
+      rules: arg.rules,
+      random: _random,
+    );
+    _initBoneyardSlots();
+    _prepareTurn();
+    return _snapshot();
+  }
+
+  /// Plays a human move for seat 0 if valid.
+  void playHumanMove(DominoPiece piece, BoardEnd end) {
+    final move = Move(piece, end);
+    if (_match.round.turn != 0 || !_myMoves.contains(move)) return;
+    _lastPlayedPiece = piece;
+    _match.play(move);
+    ref.read(soundServiceProvider).playTilePlace();
+    _prepareTurn();
+    _emit();
+  }
+
+  /// Draws the specific tile at [slotIndex] from the 2-player boneyard table.
+  void drawHumanTile(int slotIndex) {
+    if (!_awaitingHumanDraw || _match.round.turn != 0) return;
+    if (slotIndex < 0 || slotIndex >= _boneyardSlots.length) return;
+    final piece = _boneyardSlots[slotIndex];
+    if (piece == null) return;
+
+    final boneyardIndex = _match.round.boneyard.indexOf(piece);
+    if (boneyardIndex == -1) return;
+
+    _match.draw(boneyardIndex);
+    _boneyardSlots[slotIndex] = null;
+    ref.read(soundServiceProvider).playTileDraw();
+    _prepareTurn();
+    _emit();
+  }
+
+  /// Advances to the next round manually if needed.
+  void startNextRound() {
+    if (_match.isOver || !_match.round.isOver) return;
+    _showResultPending = false;
+    _revealingRound = false;
+    _lastPlayedPiece = null;
+    _match.startNextRound();
+    _initBoneyardSlots();
+    _prepareTurn();
+    _emit();
+  }
+
+  /// Resets scores and history and starts a fresh match.
+  void resetMatch() {
+    _showResultPending = false;
+    _revealingRound = false;
+    _lastPlayedPiece = null;
+    _match.resetMatch();
+    _initBoneyardSlots();
+    _prepareTurn();
+    _emit();
+  }
+
+  /// Developer shortcut: deals a fresh first round without resetting scores.
+  void redeal() {
+    _showResultPending = false;
+    _revealingRound = false;
+    _lastPlayedPiece = null;
+    _match.redealCurrentRound();
+    _initBoneyardSlots();
+    _prepareTurn();
+    _emit();
+  }
+
+  void _initBoneyardSlots() {
+    if (arg.playerCount != 2) {
+      _boneyardSlots = const [];
+      return;
+    }
+    final remaining = _match.round.boneyard;
+    final pad = math.max(0, _boneyardTableSlots - remaining.length);
+    _boneyardSlots = <DominoPiece?>[
+      ...remaining,
+      ...List<DominoPiece?>.filled(pad, null),
+    ];
+  }
+
+  // ---------------------------------------------------------------------
+  // Turn orchestration & timers
+  // ---------------------------------------------------------------------
+
+  void _cancelTimers() {
+    _timer?.cancel();
+    _turnTimer?.cancel();
+  }
+
+  void _schedule(Duration delay, void Function() action) {
+    _timer?.cancel();
+    _timer = Timer(delay, () {
+      if (!_disposed) action();
+    });
+  }
+
+  /// Updates turn-derived fields and schedules the next timer without emitting
+  /// synchronously (safe to call from [build]).
+  void _prepareTurn() {
+    _cancelTimers();
+    _myMoves = const [];
+    _awaitingHumanDraw = false;
+    _revealingRound = false;
+    _showResultPending = false;
+
+    final round = _match.round;
+    if (round.isOver) {
+      _status = null;
+      _revealingRound = true;
+      _schedule(_revealDelay, () {
+        if (_match.isOver) {
+          _showResultPending = true;
+          _emit();
+        } else {
+          _revealingRound = false;
+          _lastPlayedPiece = null;
+          _match.startNextRound();
+          _initBoneyardSlots();
+          _prepareTurn();
+          _emit();
+        }
+      });
+      return;
+    }
+
+    final seat = round.turn;
+    final moves = _match.legalMoves();
+
+    if (moves.isEmpty) {
+      final canDraw = round.playerCount == 2 && round.boneyard.isNotEmpty;
+      if (canDraw && seat == 0) {
+        // Human chooses tiles directly from the 2-row wooden boneyard table.
+        _status = null;
+        _awaitingHumanDraw = true;
+        return;
+      }
+
+      _status = (
+        seat: seat,
+        kind: canDraw
+            ? MatchStatusKind.draws
+            : (arg.playerCount == 4
+                  ? MatchStatusKind.noTiles
+                  : MatchStatusKind.passes),
+      );
+      _schedule(canDraw ? _drawDelay : _passDelay, _resolveNoMoves);
+      return;
+    }
+
+    _status = null;
+    if (seat == 0) {
+      _myMoves = moves;
+      _startTurnTimer();
+    } else {
+      _schedule(_aiDelay, () => _aiPlay(moves));
+    }
+  }
+
+  void _startTurnTimer() {
+    _turnTimer?.cancel();
+    _secondsLeft = turnSeconds;
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
+      _secondsLeft--;
+      if (_secondsLeft <= 0) {
+        timer.cancel();
+        _autoPlayForMe();
+      } else {
+        _emit();
+      }
+    });
+  }
+
+  /// PROTOTYPE: random legal move on timeout. Replaced by AI in Phase 5.
+  void _autoPlayForMe() {
+    if (_match.round.isOver || _match.round.turn != 0 || _myMoves.isEmpty) {
+      return;
+    }
+    final move = _myMoves[_random.nextInt(_myMoves.length)];
+    _match.play(move);
+    _prepareTurn();
+    _emit();
+  }
+
+  void _resolveNoMoves() {
+    if (_match.round.playerCount == 2 && _match.round.boneyard.isNotEmpty) {
+      final drawn = _match.draw();
+      final idx = _boneyardSlots.indexOf(drawn);
+      if (idx != -1) _boneyardSlots[idx] = null;
+      ref.read(soundServiceProvider).playTileDraw();
+    } else {
+      _match.pass();
+      ref.read(soundServiceProvider).playPass();
+    }
+    _prepareTurn();
+    _emit();
+  }
+
+  /// PROTOTYPE: random legal move for AI seats. Replaced in Phase 5.
+  void _aiPlay(List<Move> moves) {
+    final move = moves[_random.nextInt(moves.length)];
+    _lastPlayedPiece = move.piece;
+    _match.play(move);
+    ref.read(soundServiceProvider).playTilePlace();
+    _prepareTurn();
+    _emit();
+  }
+
+  void _emit() {
+    if (_disposed) return;
+    state = _snapshot();
+  }
+
+  MatchViewState _snapshot() {
+    final round = _match.round;
+    return MatchViewState(
+      playerCount: arg.playerCount,
+      rules: arg.rules,
+      board: round.board,
+      hands: [
+        for (final hand in round.hands) List<DominoPiece>.unmodifiable(hand),
+      ],
+      boneyardCount: round.boneyard.length,
+      boneyardSlots: List<DominoPiece?>.unmodifiable(_boneyardSlots),
+      awaitingHumanDraw: _awaitingHumanDraw,
+      revealingRound: _revealingRound,
+      lastPlayedPiece: _lastPlayedPiece,
+      startSeat: round.startSeat,
+      openingPiece: round.openingPiece,
+      turnSeat: round.isOver ? null : round.turn,
+      scores: _match.scores,
+      history: _match.history,
+      myMoves: List<Move>.unmodifiable(_myMoves),
+      secondsLeft: _secondsLeft,
+      turnSeconds: turnSeconds,
+      status: _status,
+      roundResult: round.result,
+      matchWinnerTeam: _match.winnerTeam,
+      showResultPending: _showResultPending,
+      revision: ++_revision,
+    );
+  }
+}
+
+/// Provider creating one [MatchController] per match configuration.
+final matchControllerProvider = NotifierProvider.autoDispose
+    .family<MatchController, MatchViewState, MatchArgs>(MatchController.new);

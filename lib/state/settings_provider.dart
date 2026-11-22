@@ -19,6 +19,7 @@ class SettingsState {
     this.targetScore = 151,
     this.tileSkinId = 'ivory',
     this.soundEnabled = true,
+    this.ambientEnabled = true,
   });
 
   static const List<String> supportedLanguages = ['ar', 'en'];
@@ -30,6 +31,7 @@ class SettingsState {
   final int targetScore;
   final String tileSkinId;
   final bool soundEnabled;
+  final bool ambientEnabled;
 
   Locale get locale => Locale(languageCode);
 
@@ -38,12 +40,14 @@ class SettingsState {
     int? targetScore,
     String? tileSkinId,
     bool? soundEnabled,
+    bool? ambientEnabled,
   }) {
     return SettingsState(
       languageCode: languageCode ?? this.languageCode,
       targetScore: targetScore ?? this.targetScore,
       tileSkinId: tileSkinId ?? this.tileSkinId,
       soundEnabled: soundEnabled ?? this.soundEnabled,
+      ambientEnabled: ambientEnabled ?? this.ambientEnabled,
     );
   }
 }
@@ -54,6 +58,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
   static const _kTargetScore = 'settings.target_score';
   static const _kTileSkin = 'settings.tile_skin';
   static const _kSound = 'settings.sound';
+  static const _kAmbient = 'settings.ambient_sound';
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
@@ -76,6 +81,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
           : defaults.targetScore,
       tileSkinId: prefs.getString(_kTileSkin) ?? defaults.tileSkinId,
       soundEnabled: prefs.getBool(_kSound) ?? defaults.soundEnabled,
+      ambientEnabled: prefs.getBool(_kAmbient) ?? defaults.ambientEnabled,
     );
   }
 
@@ -97,6 +103,11 @@ class SettingsNotifier extends Notifier<SettingsState> {
   void setSound(bool enabled) {
     state = state.copyWith(soundEnabled: enabled);
     _prefs.setBool(_kSound, enabled);
+  }
+
+  void setAmbientSound(bool enabled) {
+    state = state.copyWith(ambientEnabled: enabled);
+    _prefs.setBool(_kAmbient, enabled);
   }
 }
 
