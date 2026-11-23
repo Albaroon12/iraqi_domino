@@ -6,7 +6,7 @@ import 'package:iraqi_domino/state/match_controller.dart';
 void main() {
   for (final players in [2, 4]) {
     group('MatchController ($players players)', () {
-      test('initializes match state with valid hands and scores', () {
+      test('initializes match state with valid hands, scores, and distinct AI personas', () {
         final container = ProviderContainer();
         addTearDown(container.dispose);
 
@@ -21,6 +21,18 @@ void main() {
         expect(state.scores, [0, 0]);
         expect(state.history, isEmpty);
         expect(state.hands.length, players);
+        expect(state.seats.length, players);
+        expect(state.seats[0].isHuman, isTrue);
+
+        // Every AI seat gets a unique named AiPersona.
+        final personaIds = <String>{};
+        for (var i = 1; i < players; i++) {
+          expect(state.seats[i].isBot, isTrue);
+          expect(state.seats[i].aiPersona, isNotNull);
+          personaIds.add(state.seats[i].aiPersona!.id);
+        }
+        expect(personaIds.length, players - 1);
+        expect(state.canAcceptHumanJoin, isTrue);
         expect(state.isMatchOver, isFalse);
         expect(state.showResultPending, isFalse);
         expect(state.turnSeat, isNotNull);
@@ -78,4 +90,33 @@ void main() {
       });
     });
   }
+
+  group('MatchController AI Takeover & Hot-Join', () {
+    test('replaceHumanWithBot marks seat open and tryHotJoinHuman reclaims it', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      const args = (
+        playerCount: 4,
+        rules: GameRulesConfig(targetScore: 151),
+      );
+      final notifier = container.read(matchControllerProvider(args).notifier);
+
+      notifier.replaceHumanWithBot(2);
+      final afterDrop = container.read(matchControllerProvider(args));
+      expect(afterDrop.seats[2].isBot, isTrue);
+      expect(afterDrop.seats[2].openForHumanJoin, isTrue);
+
+      final joined = notifier.tryHotJoinHuman(
+        seat: 2,
+        playerId: 'u_99',
+        nameAr: 'سيف',
+        nameEn: 'Saif',
+      );
+      expect(joined, isTrue);
+      final afterJoin = container.read(matchControllerProvider(args));
+      expect(afterJoin.seats[2].isHuman, isTrue);
+      expect(afterJoin.seats[2].nameAr, 'سيف');
+    });
+  });
 }

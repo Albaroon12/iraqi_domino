@@ -1,18 +1,21 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../ai/ai_persona.dart';
 import '../../core/constants/app_colors.dart';
+import 'ai_persona_avatar.dart';
 
 /// Compact player marker: a small avatar with a tile-count badge and the
 /// name below it. The avatar glows gold when it is the player's turn.
 ///
-/// When [secondsLeft] is given, a ring counts the turn time down around the
-/// avatar; in the last 10 seconds it turns red and shows the number.
+/// When [aiPersona] is supplied, renders the persona's custom portrait and a
+/// compact `AI` tag so players immediately recognize bot-controlled seats.
 class PlayerChip extends StatelessWidget {
   const PlayerChip({
     super.key,
     required this.name,
     required this.tileCount,
     required this.isTurn,
+    this.aiPersona,
     this.icon = Icons.person_rounded,
     this.secondsLeft,
     this.secondsTotal = 30,
@@ -22,6 +25,7 @@ class PlayerChip extends StatelessWidget {
   final String name;
   final int tileCount;
   final bool isTurn;
+  final AiPersona? aiPersona;
   final IconData icon;
   final int? secondsLeft;
   final int secondsTotal;
@@ -34,6 +38,7 @@ class PlayerChip extends StatelessWidget {
     const urgentColor = Color(0xFFE5533D);
     final avatarSize = compact ? 28.0 : 34.0;
     final badgeSize = compact ? 15.0 : 17.0;
+    final persona = aiPersona;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -74,11 +79,16 @@ class PlayerChip extends StatelessWidget {
                         height: 1,
                       ),
                     )
-                  : Icon(
-                      icon,
-                      size: compact ? 16 : 20,
-                      color: AppColors.ivory,
-                    ),
+                  : (persona != null
+                        ? AiPersonaAvatar(
+                            persona: persona,
+                            size: avatarSize - 4,
+                          )
+                        : Icon(
+                            icon,
+                            size: compact ? 16 : 20,
+                            color: AppColors.ivory,
+                          )),
             ),
             // Turn timer ring.
             if (left != null)
@@ -97,6 +107,35 @@ class PlayerChip extends StatelessWidget {
                       strokeWidth: 3,
                       color: urgent ? urgentColor : AppColors.gold,
                       backgroundColor: const Color(0x33FFFFFF),
+                    ),
+                  ),
+                ),
+              ),
+            // AI bot badge on top-left when controlled by an AiPersona.
+            if (persona != null)
+              Positioned(
+                left: compact ? -6 : -7,
+                top: -3,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 3 : 3.5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A2634),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: AppColors.gold.withValues(alpha: 0.7),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Text(
+                    'AI',
+                    style: TextStyle(
+                      color: AppColors.gold,
+                      fontSize: compact ? 7 : 7.5,
+                      fontWeight: FontWeight.w900,
+                      height: 1.05,
                     ),
                   ),
                 ),
@@ -129,10 +168,10 @@ class PlayerChip extends StatelessWidget {
         ),
         SizedBox(height: compact ? 3 : 4),
         Container(
-          constraints: BoxConstraints(maxWidth: compact ? 48 : 64),
+          constraints: BoxConstraints(maxWidth: compact ? 52 : 76),
           padding: EdgeInsets.symmetric(
             horizontal: compact ? 5 : 6,
-            vertical: compact ? 2 : 2,
+            vertical: 2,
           ),
           decoration: BoxDecoration(
             color: const Color(0xE6120905),

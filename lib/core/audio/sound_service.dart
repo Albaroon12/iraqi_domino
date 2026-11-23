@@ -18,11 +18,45 @@ class SoundService {
   static const String _tileDrawAsset = 'audio/tile_draw.mp3';
   static const String _tilePassAsset = 'audio/tile_pass.mp3';
 
-  final AudioPlayer _sfxPlayer = AudioPlayer();
-  final AudioPlayer _ambientPlayer = AudioPlayer();
+  AudioPlayer? _sfxPlayer;
+  AudioPlayer? _ambientPlayer;
   final Map<String, bool> _assetExists = {};
 
   bool _ambientRequested = false;
+
+  AudioPlayer? _getSfxPlayer() {
+    if (_sfxPlayer != null) return _sfxPlayer;
+    try {
+      return _sfxPlayer = AudioPlayer();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  AudioPlayer? _getAmbientPlayer() {
+    if (_ambientPlayer != null) return _ambientPlayer;
+    try {
+      return _ambientPlayer = AudioPlayer();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool get _soundEnabled {
+    try {
+      return _ref.read(settingsProvider).soundEnabled;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool get _ambientEnabled {
+    try {
+      return _ref.read(settingsProvider).ambientEnabled;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<bool> _hasAsset(String assetPath) async {
     final cached = _assetExists[assetPath];
@@ -38,11 +72,13 @@ class SoundService {
   }
 
   Future<void> _playSfx(String assetPath) async {
-    if (!_ref.read(settingsProvider).soundEnabled) return;
+    if (!_soundEnabled) return;
     if (!await _hasAsset(assetPath)) return;
+    final player = _getSfxPlayer();
+    if (player == null) return;
     try {
-      await _sfxPlayer.stop();
-      await _sfxPlayer.play(AssetSource(assetPath), volume: 0.9);
+      await player.stop();
+      await player.play(AssetSource(assetPath), volume: 0.9);
     } catch (_) {
       // Ignore audio errors on unsupported/headless test environments.
     }
@@ -60,30 +96,32 @@ class SoundService {
   /// Starts looping the Iraqi café ambience if enabled in settings.
   Future<void> startCafeAmbient() async {
     _ambientRequested = true;
-    if (!_ref.read(settingsProvider).ambientEnabled) return;
+    if (!_ambientEnabled) return;
     if (!await _hasAsset(_cafeAmbientAsset)) return;
+    final player = _getAmbientPlayer();
+    if (player == null) return;
     try {
-      await _ambientPlayer.setReleaseMode(ReleaseMode.loop);
-      await _ambientPlayer.setVolume(0.25);
-      await _ambientPlayer.play(AssetSource(_cafeAmbientAsset));
+      await player.setReleaseMode(ReleaseMode.loop);
+      await player.setVolume(0.25);
+      await player.play(AssetSource(_cafeAmbientAsset));
     } catch (_) {}
   }
 
   /// Pauses the café ambience (e.g. when app goes to background).
   Future<void> pauseCafeAmbient() async {
     try {
-      await _ambientPlayer.pause();
+      await _ambientPlayer?.pause();
     } catch (_) {}
   }
 
   /// Resumes the café ambience if still in a match and enabled.
   Future<void> resumeCafeAmbient() async {
-    if (!_ambientRequested || !_ref.read(settingsProvider).ambientEnabled) {
+    if (!_ambientRequested || !_ambientEnabled) {
       return;
     }
     if (!await _hasAsset(_cafeAmbientAsset)) return;
     try {
-      await _ambientPlayer.resume();
+      await _ambientPlayer?.resume();
     } catch (_) {}
   }
 
@@ -91,13 +129,13 @@ class SoundService {
   Future<void> stopCafeAmbient({bool clearRequest = true}) async {
     if (clearRequest) _ambientRequested = false;
     try {
-      await _ambientPlayer.stop();
+      await _ambientPlayer?.stop();
     } catch (_) {}
   }
 
   void dispose() {
-    _sfxPlayer.dispose();
-    _ambientPlayer.dispose();
+    _sfxPlayer?.dispose();
+    _ambientPlayer?.dispose();
   }
 }
 

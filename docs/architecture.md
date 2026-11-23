@@ -32,12 +32,24 @@ Status: DRAFT v0.1
 - engine/ holds pure-Dart game logic: DominoPiece, Dealer (2-2-3 deal,
   invalid-deal prevention, 2p alternate-draw opening double), Board (line of
   play, end matching, orientation), RoundState (turns, legal moves,
-  pass/draw, domino/blocked/burned), RoundResult, GameRulesConfig, and
-  MatchState (multi-round scoring, round history, target-score match end).
+  pass/draw, playHistory, passHistory, drawHistory, domino/blocked/burned),
+  RoundResult, GameRulesConfig (targetScore, aiDifficulty), SeatOccupant
+  (human vs bot seat state + endgame hot-join cutoff), and MatchState
+  (multi-round scoring, round history, target-score match end).
+- ai/ holds pure-Dart AI strategies (`AiDifficulty`, `DominoAi`,
+  `UserPlayProfile`, and the 10 named `AiPersona` characters) supporting 4
+  deterministic difficulty levels (`easy`, `medium`, `hard`, `expert`) with
+  Bayesian unseen-tile hand prediction, pass & 2p boneyard draw deduction,
+  partner move-signal analysis, 2-ply lookahead resilience, and persistent
+  learning from the human player's moves.
 - state/ holds MatchController (`matchControllerProvider`, Riverpod
-  `NotifierProvider.autoDispose.family`) which owns MatchState, turn timers,
-  and AI/draw/pass scheduling, emitting immutable MatchViewState snapshots
-  to GameScreen.
+  `NotifierProvider.autoDispose.family`) which owns MatchState, per-seat
+  `SeatOccupant`s (with distinct `AiPersona` bots, `replaceHumanWithBot`, and
+  `tryHotJoinHuman`), turn timers, and AI/draw/pass scheduling, emitting
+  immutable MatchViewState snapshots to GameScreen.
+- core/games/game_catalog.dart provides a data-driven GameCatalog registry so
+  additional games can be plugged in under `lib/games/<game_id>/` without
+  modifying the 5-tab AppShellScreen (`lib/ui/screens/app_shell_screen.dart`).
 - rendering/ holds SerpentineLayout (pure Dart, fixed tile width from area),
   BoardFrame, BoardView (with smooth pan + fallback scale for single-arm
   overflow), DominoTile/DominoBack painters, and tile/table skins.

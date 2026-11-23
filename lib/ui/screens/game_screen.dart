@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../ai/ai_persona.dart';
 import '../../core/audio/sound_service.dart';
 import '../../core/constants/app_colors.dart';
 import '../../engine/board.dart';
@@ -50,9 +51,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
   /// Total boneyard tiles at the start of a two-player round.
   static const int _initialBoneyardCount = 14;
 
-  /// Keys to find where the two open ends are on the screen.
+  /// Keys to find where the two open ends and the newly placed tile are.
   final GlobalKey _leftSlotKey = GlobalKey();
   final GlobalKey _rightSlotKey = GlobalKey();
+  final GlobalKey _lastPlacedKey = GlobalKey();
 
   /// Per-piece keys in your hand so a released tile flies straight back into
   /// its live opening slot.
@@ -105,6 +107,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   bool get _four => widget.playerCount == 4;
   int get _topSeat => _four ? 2 : 1;
+
   MatchArgs get _matchArgs =>
       (playerCount: widget.playerCount, rules: widget.rules);
 
@@ -163,7 +166,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
     _hoverEnd = null;
   }
 
-  /// Launches a smooth flight from [fromCenter] to the board slot for [end].
+  /// Commits [piece] on [end] immediately so the board lays out its true final
+  /// position and orientation, then flies the tile crisply into that exact spot
+  /// (morphing into its board orientation mid-flight without spinning).
   void _flyToBoard({
     required DominoPiece piece,
     required BoardEnd end,
@@ -172,18 +177,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
     required double fromWidth,
     required Duration duration,
   }) {
-    final key = end == BoardEnd.left ? _leftSlotKey : _rightSlotKey;
-    final targetBox = key.currentContext?.findRenderObject();
-    if (targetBox is! RenderBox || !targetBox.attached) {
-      setState(_clearInteraction);
-      _controller.playHumanMove(piece, end);
-      return;
-    }
-
-    final targetCenter = targetBox.localToGlobal(
-      targetBox.size.center(Offset.zero),
-    );
-    final targetWidth = math.min(targetBox.size.width, targetBox.size.height);
+    final slotKey = end == BoardEnd.left ? _leftSlotKey : _rightSlotKey;
+    final fallbackTarget = _slotCenter(slotKey) ?? fromCenter;
 
     setState(() {
       _dragging = null;
@@ -192,20 +187,27 @@ class _GameScreenState extends ConsumerState<GameScreen>
       _flyingToBoard = piece;
     });
 
+    // Place the move immediately; BoardView hides _flyingToBoard while the
+    // overlay tile glides into _lastPlacedKey's exact RenderBox.
+    _controller.playHumanMove(piece, end);
+
     _flyOverlayTile(
       piece: piece,
       skin: skin,
       fromCenter: fromCenter,
-      targetCenter: () => targetCenter,
+      targetCenter: () => _slotCenter(_lastPlacedKey) ?? fallbackTarget,
+      targetDominoTile: () {
+        final w = _lastPlacedKey.currentWidget;
+        return w is DominoTile ? w : null;
+      },
       fromWidth: fromWidth,
-      toWidth: targetWidth,
+      toWidth: 22,
       duration: duration,
       curve: Curves.easeOutCubic,
       onDone: () {
-        setState(() {
-          if (_flyingToBoard == piece) _flyingToBoard = null;
-        });
-        _controller.playHumanMove(piece, end);
+        if (mounted && _flyingToBoard == piece) {
+          setState(() => _flyingToBoard = null);
+        }
       },
     );
   }
@@ -224,7 +226,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       skin: skin,
       fromCenter: fromCenter,
       fromWidth: _lastHandTileWidth,
-      duration: const Duration(milliseconds: 260),
+      duration: const Duration(milliseconds: 185),
     );
   }
 
@@ -251,12 +253,16 @@ class _GameScreenState extends ConsumerState<GameScreen>
   }
 
   /// Smoothly flies a borderless [DominoTile] in the overlay from [fromCenter]
-  /// to [targetCenter] (queried live each frame so it tracks opening slots).
+  /// to [targetCenter] (queried live each frame). When [targetDominoTile] is
+  /// provided, the tile flips cleanly mid-flight into its exact final board
+  /// orientation (top/bottom/horizontal/width) and drops straight into place
+  /// without spinning.
   void _flyOverlayTile({
     required DominoPiece piece,
     required TileSkin skin,
     required Offset fromCenter,
     required Offset? Function() targetCenter,
+    DominoTile? Function()? targetDominoTile,
     required double fromWidth,
     required double toWidth,
     required Duration duration,
@@ -272,6 +278,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final controller = AnimationController(vsync: this, duration: duration);
     final curved = CurvedAnimation(parent: controller, curve: curve);
     var lastTarget = fromCenter;
+    DominoTile? resolvedTile;
 
     late final OverlayEntry entry;
     entry = OverlayEntry(
@@ -281,35 +288,67 @@ class _GameScreenState extends ConsumerState<GameScreen>
           builder: (_, _) {
             final liveTarget = targetCenter();
             if (liveTarget != null) lastTarget = liveTarget;
+            final liveTile = targetDominoTile?.call();
+            if (liveTile != null) resolvedTile = liveTile;
+
             final t = curved.value;
             final center = Offset.lerp(fromCenter, lastTarget, t)!;
-            final w = fromWidth + (toWidth - fromWidth) * t;
-            final h = w * 2;
+            final endWidth = resolvedTile?.width ?? toWidth;
+            final w = fromWidth + (endWidth - fromWidth) * t;
             final shadowAlpha = (1 - t) * 0.45;
+
+            // Morph cleanly around t = 0.35 into the final board orientation
+            // without any spinning wheel.
+            final useFinalOrientation = resolvedTile != null && t >= 0.35;
+            final isHoriz =
+                useFinalOrientation && (resolvedTile?.horizontal ?? false);
+            final topVal = useFinalOrientation ? resolvedTile!.top : piece.low;
+            final botVal = useFinalOrientation
+                ? resolvedTile!.bottom
+                : piece.high;
+
+            // Subtle mid-flight flip pulse when orientation changes.
+            final needsMorph =
+                resolvedTile != null &&
+                (resolvedTile!.horizontal ||
+                    resolvedTile!.top != piece.low ||
+                    resolvedTile!.bottom != piece.high);
+            var morphScale = 1.0;
+            if (needsMorph && t > 0.15 && t < 0.55) {
+              final phase = ((t - 0.35).abs() / 0.20).clamp(0.0, 1.0);
+              morphScale = 0.82 + 0.18 * phase;
+            }
+
+            final boxW = isHoriz ? w * 2 : w;
+            final boxH = isHoriz ? w : w * 2;
 
             return Stack(
               children: [
                 Positioned(
-                  left: center.dx - w / 2,
-                  top: center.dy - h / 2,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(w * 0.16),
-                      boxShadow: shadowAlpha > 0.01
-                          ? [
-                              BoxShadow(
-                                color: Color.fromRGBO(0, 0, 0, shadowAlpha),
-                                blurRadius: 12 * (1 - t) + 2,
-                                offset: Offset(0, 6 * (1 - t)),
-                              ),
-                            ]
-                          : const [],
-                    ),
-                    child: DominoTile(
-                      top: piece.low,
-                      bottom: piece.high,
-                      width: w,
-                      skin: skin,
+                  left: center.dx - boxW / 2,
+                  top: center.dy - boxH / 2,
+                  child: Transform.scale(
+                    scale: morphScale,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(w * 0.16),
+                        boxShadow: shadowAlpha > 0.01
+                            ? [
+                                BoxShadow(
+                                  color: Color.fromRGBO(0, 0, 0, shadowAlpha),
+                                  blurRadius: 12 * (1 - t) + 2,
+                                  offset: Offset(0, 6 * (1 - t)),
+                                ),
+                              ]
+                            : const [],
+                      ),
+                      child: DominoTile(
+                        top: topVal,
+                        bottom: botVal,
+                        width: w,
+                        horizontal: isHoriz,
+                        skin: skin,
+                      ),
                     ),
                   ),
                 ),
@@ -372,7 +411,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     if (end != _hoverEnd) setState(() => _hoverEnd = end);
   }
 
-  void _onDrop(DragTargetDetails<DominoPiece> details) {
+  void _onDrop(DragTargetDetails<DominoPiece> details, TileSkin skin) {
     final piece = details.data;
     final ends = _currentMatch.endsFor(piece);
     if (ends.isEmpty) return;
@@ -383,8 +422,14 @@ class _GameScreenState extends ConsumerState<GameScreen>
               ? ends.first
               : _nearestEnd(_dragPoint(details), ends));
 
-    setState(_clearInteraction);
-    _controller.playHumanMove(piece, end);
+    _flyToBoard(
+      piece: piece,
+      end: end,
+      skin: skin,
+      fromCenter: _dragPoint(details),
+      fromWidth: _feedbackWidth,
+      duration: const Duration(milliseconds: 135),
+    );
   }
 
   /// The center of the dragged tile on the screen.
@@ -418,8 +463,16 @@ class _GameScreenState extends ConsumerState<GameScreen>
   // Texts
   // ---------------------------------------------------------------------
 
-  String _seatName(AppLocalizations l10n, int seat) {
+  String _seatName(
+    AppLocalizations l10n,
+    bool isAr,
+    MatchViewState match,
+    int seat,
+  ) {
     if (seat == 0) return l10n.playerYou;
+    if (seat >= 0 && seat < match.seats.length) {
+      return match.seats[seat].displayName(isAr);
+    }
     if (!_four) return l10n.opponentSingle;
     return switch (seat) {
       1 => l10n.opponentRight,
@@ -428,22 +481,35 @@ class _GameScreenState extends ConsumerState<GameScreen>
     };
   }
 
-  String _startMessage(AppLocalizations l10n, MatchViewState match) {
+  AiPersona? _seatPersona(MatchViewState match, int seat) {
+    if (seat <= 0 || seat >= match.seats.length) return null;
+    return match.seats[seat].aiPersona;
+  }
+
+  String _startMessage(
+    AppLocalizations l10n,
+    bool isAr,
+    MatchViewState match,
+  ) {
     final seat = match.startSeat;
     final forced = match.openingPiece;
     if (forced != null) {
       return seat == 0
           ? l10n.youStartRound('$forced')
-          : l10n.otherStartsRound(_seatName(l10n, seat), '$forced');
+          : l10n.otherStartsRound(_seatName(l10n, isAr, match, seat), '$forced');
     }
     return seat == 0
         ? l10n.youStartRoundFree
-        : l10n.otherStartsRoundFree(_seatName(l10n, seat));
+        : l10n.otherStartsRoundFree(_seatName(l10n, isAr, match, seat));
   }
 
-  String _statusText(AppLocalizations l10n, MatchViewState match) {
+  String _statusText(
+    AppLocalizations l10n,
+    bool isAr,
+    MatchViewState match,
+  ) {
     final status = match.status!;
-    final name = _seatName(l10n, status.seat);
+    final name = _seatName(l10n, isAr, match, status.seat);
     return switch (status.kind) {
       MatchStatusKind.noTiles => l10n.saysNoTiles(name),
       MatchStatusKind.passes => l10n.passesTurn(name),
@@ -470,6 +536,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final settings = ref.watch(settingsProvider);
     final skin = TileSkin.byId(settings.tileSkinId);
     final match = ref.watch(matchControllerProvider(_matchArgs));
@@ -526,8 +593,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
           bottom: false,
           child: Column(
             children: [
-              Expanded(child: _buildTableArea(l10n, skin, match)),
-              _buildBottomArea(l10n, skin, match),
+              Expanded(child: _buildTableArea(l10n, isAr, skin, match)),
+              _buildBottomArea(l10n, isAr, skin, match),
             ],
           ),
         ),
@@ -542,6 +609,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   /// seating must not flip with the language direction.
   Widget _buildTableArea(
     AppLocalizations l10n,
+    bool isAr,
     TileSkin skin,
     MatchViewState match,
   ) {
@@ -586,9 +654,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     PlayerChip(
-                      name: _seatName(l10n, _topSeat),
+                      name: _seatName(l10n, isAr, match, _topSeat),
                       tileCount: topCount,
                       isTurn: match.turnSeat == _topSeat,
+                      aiPersona: _seatPersona(match, _topSeat),
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -623,7 +692,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
               top: top,
               width: boardWidth,
               height: boardHeight,
-              child: _buildBoardZone(l10n, skin, match),
+              child: _buildBoardZone(l10n, isAr, skin, match),
             ),
 
             // Side players (4 players only), anchored to the left and right
@@ -640,7 +709,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
                     child: _SidePlayer(
-                      name: _seatName(l10n, 3),
+                      name: _seatName(l10n, isAr, match, 3),
+                      aiPersona: _seatPersona(match, 3),
                       pieces: match.hands[3],
                       revealed: match.revealingRound,
                       isTurn: match.turnSeat == 3,
@@ -665,7 +735,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: _SidePlayer(
-                      name: _seatName(l10n, 1),
+                      name: _seatName(l10n, isAr, match, 1),
+                      aiPersona: _seatPersona(match, 1),
                       pieces: match.hands[1],
                       revealed: match.revealingRound,
                       isTurn: match.turnSeat == 1,
@@ -710,6 +781,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
   /// The framed board. Its inside is the line of play and the drop zone.
   Widget _buildBoardZone(
     AppLocalizations l10n,
+    bool isAr,
     TileSkin skin,
     MatchViewState match,
   ) {
@@ -724,9 +796,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
               onLeave: (_) {
                 if (_hoverEnd != null) setState(() => _hoverEnd = null);
               },
-              onAcceptWithDetails: _onDrop,
+              onAcceptWithDetails: (details) => _onDrop(details, skin),
               builder: (context, candidates, rejected) =>
-                  SizedBox.expand(child: _buildBoard(l10n, skin, match)),
+                  SizedBox.expand(child: _buildBoard(l10n, isAr, skin, match)),
             ),
           ),
           if (match.awaitingHumanDraw)
@@ -750,7 +822,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
             Align(
               alignment: Alignment.bottomCenter,
               child: IgnorePointer(
-                child: _StatusPill(text: _statusText(l10n, match)),
+                child: _StatusPill(text: _statusText(l10n, isAr, match)),
               ),
             ),
         ],
@@ -760,20 +832,19 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   Widget _buildBoard(
     AppLocalizations l10n,
+    bool isAr,
     TileSkin skin,
     MatchViewState match,
   ) {
     final ghost = _dragging ?? _selected;
-    if (match.board.isEmpty && ghost == null) {
-      return Center(
-        child: _BoardPlaceholder(message: _startMessage(l10n, match)),
-      );
-    }
     final active = ghost == null ? const <BoardEnd>[] : match.endsFor(ghost);
     final hover = _hoverEnd;
     final selected = _selected;
 
-    return BoardView(
+    // Always mount BoardView so _leftSlotKey/_rightSlotKey are attached even
+    // on an empty board (allowing the opening tap-to-play tile to fly smoothly
+    // to the center slot).
+    final boardView = BoardView(
       board: match.board,
       skin: skin,
       leftKey: _leftSlotKey,
@@ -783,15 +854,36 @@ class _GameScreenState extends ConsumerState<GameScreen>
       // Dragging: only the nearest end is lit. Tap selection: all are lit.
       litEnds: _dragging != null ? {?hover} : active.toSet(),
       lastPlacedPiece: match.lastPlayedPiece,
+      lastPlacedKey: _lastPlacedKey,
+      hiddenPiece: _flyingToBoard,
       onSlotTap: selected == null
           ? null
           : (end) => _playMine(selected, end, skin),
     );
+
+    if (match.board.isEmpty && ghost == null) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          boardView,
+          Center(
+            child: IgnorePointer(
+              child: _BoardPlaceholder(
+                message: _startMessage(l10n, isAr, match),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return boardView;
   }
 
   /// The bottom part: your hand rack and your card.
   Widget _buildBottomArea(
     AppLocalizations l10n,
+    bool isAr,
     TileSkin skin,
     MatchViewState match,
   ) {
@@ -851,91 +943,121 @@ class _GameScreenState extends ConsumerState<GameScreen>
               );
               final rackInnerWidth = math.max(0.0, rackWidth - 2);
 
-              return Container(
+              final rackBoxHeight = tileWidth * 2 + 14;
+              const liftHeadroom = 18.0;
+
+              return SizedBox(
                 width: rackWidth,
-                height: tileWidth * 2 + 26,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFF2B190E), Color(0xFF170D07)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.gold.withValues(alpha: 0.5),
-                    width: 1.2,
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x80000000),
-                      blurRadius: 6,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(11),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: rackInnerWidth),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          rackPadH,
-                          16,
-                          rackPadH,
-                          6,
+                height: rackBoxHeight + liftHeadroom,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    // The wooden rack sits at the bottom of the stack so a
+                    // selected 2-end tile rises visibly ABOVE its top border.
+                    Container(
+                      width: rackWidth,
+                      height: rackBoxHeight,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xFF2B190E), Color(0xFF170D07)],
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (final piece in myHand)
-                              AnimatedContainer(
-                                key: ValueKey(piece),
-                                duration: const Duration(milliseconds: 240),
-                                curve: Curves.easeOutCubic,
-                                width:
-                                    (_dragging == piece ||
-                                        _flyingToBoard == piece)
-                                    ? 0
-                                    : tileWidth + 6,
-                                alignment: Alignment.center,
-                                clipBehavior: Clip.hardEdge,
-                                decoration: const BoxDecoration(),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 3,
-                                  ),
-                                  child: KeyedSubtree(
-                                    key: _handKeys.putIfAbsent(
-                                      piece,
-                                      GlobalKey.new,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.gold.withValues(alpha: 0.5),
+                          width: 1.2,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x80000000),
+                            blurRadius: 6,
+                            offset: Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Clips horizontally at the rack walls while leaving top
+                    // headroom unclipped so selected tiles pop above the rack.
+                    ClipRect(
+                      clipper: const _HorizontalRackClipper(
+                        horizontalInset: 1.5,
+                        topAllowance: 24,
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        clipBehavior: Clip.none,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minWidth: rackInnerWidth),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              rackPadH,
+                              liftHeadroom + 7,
+                              rackPadH,
+                              7,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                for (final piece in myHand)
+                                  AnimatedContainer(
+                                    key: ValueKey(piece),
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeOutCubic,
+                                    width:
+                                        (_dragging == piece ||
+                                            _flyingToBoard == piece)
+                                        ? 0
+                                        : tileWidth + 6,
+                                    alignment: Alignment.center,
+                                    clipBehavior:
+                                        (_dragging == piece ||
+                                            _flyingToBoard == piece)
+                                        ? Clip.hardEdge
+                                        : Clip.none,
+                                    decoration: const BoxDecoration(),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 3,
+                                      ),
+                                      child: KeyedSubtree(
+                                        key: _handKeys.putIfAbsent(
+                                          piece,
+                                          GlobalKey.new,
+                                        ),
+                                        child: _HandTile(
+                                          piece: piece,
+                                          width: tileWidth,
+                                          feedbackWidth: _feedbackWidth,
+                                          skin: skin,
+                                          playable: match.isPlayable(piece),
+                                          dimmed:
+                                              myTurn &&
+                                              !match.isPlayable(piece),
+                                          selected: _selected == piece,
+                                          hidden: _returningPiece == piece,
+                                          onTap: () => _onTapPiece(piece, skin),
+                                          onDragStarted: () =>
+                                              _onDragStarted(piece),
+                                          onDragCanceled: (offset) =>
+                                              _onDragCanceled(
+                                                piece,
+                                                offset,
+                                                skin,
+                                              ),
+                                        ),
+                                      ),
                                     ),
-                                    child: _HandTile(
-                                      piece: piece,
-                                      width: tileWidth,
-                                      feedbackWidth: _feedbackWidth,
-                                      skin: skin,
-                                      playable: match.isPlayable(piece),
-                                      dimmed:
-                                          myTurn && !match.isPlayable(piece),
-                                      selected: _selected == piece,
-                                      hidden: _returningPiece == piece,
-                                      onTap: () => _onTapPiece(piece, skin),
-                                      onDragStarted: () =>
-                                          _onDragStarted(piece),
-                                      onDragCanceled: (offset) =>
-                                          _onDragCanceled(piece, offset, skin),
-                                    ),
                                   ),
-                                ),
-                              ),
-                          ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               );
             },
@@ -968,6 +1090,33 @@ class _GameScreenState extends ConsumerState<GameScreen>
       ),
     );
   }
+}
+
+/// Clips horizontally to the inner boundaries of the player's wooden rack
+/// (so >7 tiles clip cleanly on the left and right) while allowing extra
+/// vertical space above the top edge so a selected 2-end tile can pop out
+/// above the rack without being cut off.
+class _HorizontalRackClipper extends CustomClipper<Rect> {
+  const _HorizontalRackClipper({
+    required this.horizontalInset,
+    required this.topAllowance,
+  });
+
+  final double horizontalInset;
+  final double topAllowance;
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(
+    horizontalInset,
+    -topAllowance,
+    size.width - horizontalInset,
+    size.height,
+  );
+
+  @override
+  bool shouldReclip(_HorizontalRackClipper oldClipper) =>
+      oldClipper.horizontalInset != horizontalInset ||
+      oldClipper.topAllowance != topAllowance;
 }
 
 /// One tile of your hand. Playable tiles glow gold and can be tapped or
@@ -1024,15 +1173,15 @@ class _HandTile extends StatelessWidget {
       );
     }
 
-    // A selected tile (two possible ends) rises cleanly inside the rack
-    // without clipping.
+    // A selected tile (two possible ends) rises visibly above the top edge
+    // of the wooden rack so it clearly stands out while choosing a board end.
     tile = AnimatedScale(
-      scale: selected ? 1.05 : 1.0,
-      duration: const Duration(milliseconds: 160),
+      scale: selected ? 1.07 : 1.0,
+      duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
       child: AnimatedSlide(
-        offset: selected ? const Offset(0, -0.06) : Offset.zero,
-        duration: const Duration(milliseconds: 160),
+        offset: selected ? const Offset(0, -0.24) : Offset.zero,
+        duration: const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
         child: tile,
       ),
@@ -1092,6 +1241,7 @@ class _HandTile extends StatelessWidget {
 class _SidePlayer extends StatelessWidget {
   const _SidePlayer({
     required this.name,
+    this.aiPersona,
     required this.pieces,
     required this.revealed,
     required this.isTurn,
@@ -1102,6 +1252,7 @@ class _SidePlayer extends StatelessWidget {
   });
 
   final String name;
+  final AiPersona? aiPersona;
   final List<DominoPiece> pieces;
   final bool revealed;
   final bool isTurn;
@@ -1125,6 +1276,7 @@ class _SidePlayer extends StatelessWidget {
           ),
           child: PlayerChip(
             name: name,
+            aiPersona: aiPersona,
             tileCount: pieces.length,
             isTurn: isTurn,
             compact: true,
@@ -1282,7 +1434,6 @@ class _PlayerScoreBadge extends StatelessWidget {
 /// face-up when [revealed] is true at the end of a round).
 class _TileRack extends StatelessWidget {
   const _TileRack({
-    super.key,
     required this.pieces,
     required this.revealed,
     required this.skin,

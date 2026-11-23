@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../ai/ai_difficulty.dart';
 import '../../core/constants/app_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../../rendering/domino_tile.dart';
@@ -9,13 +10,14 @@ import '../../rendering/wood_table.dart';
 import '../../state/settings_provider.dart';
 import '../localized_names.dart';
 
-/// Settings: language, target score, tile skin and sound.
+/// Settings: language, target score, AI difficulty, tile skin and sound.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final settings = ref.watch(settingsProvider);
     // read(...notifier) gives the object that changes the settings.
     final notifier = ref.read(settingsProvider.notifier);
@@ -51,6 +53,21 @@ class SettingsScreen extends ConsumerWidget {
                         label: Text('$score'),
                         selected: settings.targetScore == score,
                         onSelected: (_) => notifier.setTargetScore(score),
+                      ),
+                  ],
+                ),
+              ),
+              _Section(
+                title: isAr ? 'مستوى الذكاء الاصطناعي' : 'AI Difficulty',
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final d in AiDifficulty.values)
+                      ChoiceChip(
+                        label: Text(aiDifficultyName(isAr, d)),
+                        selected: settings.aiDifficulty == d,
+                        onSelected: (_) => notifier.setAiDifficulty(d),
                       ),
                   ],
                 ),

@@ -6,7 +6,7 @@
 > The owner works with several agents on different days. No agent remembers
 > the previous one. This file is the memory.
 
-Last updated: 2026-11-20 by Antigravity. Fixed SerpentineLayout syntax error; completed responsive 2p/4p GameScreen UI polish (tall board, edge-to-edge dock, opponent racks, score/target badges, round history, smooth BoardView pan/fallback).
+Last updated: 2026-11-24 by Antigravity. Completed Phase 5: pure-Dart AI (`lib/ai/ai_difficulty.dart`, `lib/ai/domino_ai.dart`) with 4 difficulty levels (Easy, Medium, Hard, Expert), play/pass history tracking in `RoundState`, difficulty selection in `ModeSelectionScreen` and `SettingsScreen`, unit tests in `test/ai/domino_ai_test.dart`, and pre-placement tile flight orientation morphing in `GameScreen`.
 
 ---
 
@@ -53,11 +53,12 @@ Roadmap source: `docs/roadmap.md`.
 | 1 | Flutter project, shell, fonts, theme | **Done.** |
 | 2 | Assets & UI design (table, tiles, menus, settings) | **Done in code**: painted tiles, 3 tile skins, wood table, main menu, mode selection, settings with persistence, ar/en localization. Owner look-approval not recorded. |
 | 3 | Playable prototype | **Essentially done**, but the owner rejected the old board look/line layout (see 3b). Being redone in steps R1-R6 (R1, R2 done). |
-| 4 | Real engine + rules + unit tests | **Started, not finished.** Engine is pure Dart with tests, but is still labeled PROTOTYPE and match-level logic lives in the UI. See section 5. |
-| 5 | AI (Easy/Medium/Hard/Expert) | Not started. `lib/ai/` does not exist. Computer plays a random legal move. |
-| 6-11 | Local multiplayer, online, profiles, shop, tournaments, release | Not started. |
+| 4 | Real engine + rules + unit tests | **Done.** Pure-Dart `MatchState`, `RoundState`, `Dealer` (with invalid-deal prevention and 2p alternate draw), `GameRulesConfig`, and Riverpod `MatchController` with unit tests. |
+| 5 | AI (Easy/Medium/Hard/Expert) | **Done.** Pure-Dart `lib/ai/` (`AiDifficulty`, `DominoAi`, `UserPlayProfile`, 10 `AiPersona` characters) with 4 difficulty levels, Bayesian hand prediction, pass/draw deduction, 4p partner coordination, user-move learning, and unit tests. |
+| 6 | Local multiplayer (Wi-Fi Direct / Bluetooth) | **Prepared & Locked in ModeHubScreen.** Pass & Play on one phone cancelled by owner; `ModeHubScreen` shows `Play vs AI` (unlocked) and keeps `Random Online`, `Friends Room (Code & Seat Picker)`, and `Wi-Fi Direct / Bluetooth` locked until their respective networking/backend steps land. |
+| 7-11 | Online, profiles, shop, tournaments, release | Foundation started (`SeatOccupant` bot takeover & endgame hot-join cutoff in `lib/engine/seat_occupant.dart`). Server & accounts next. |
 
-**One-line summary:** *Late Phase 3 / early Phase 4. Board & table UI redesign (R1–R4 + responsive 2p/4p layout, edge-to-edge dock, opponent racks, score/target badges, round history, and smooth pan/fallback in `BoardView`) is implemented; awaiting owner visual/manual test, R5/R6 polish, and P1 Phase 4 engine work (`I-1..I-4`).*
+**One-line summary:** *10 named AI personas (`AiPersona` + custom portraits), `SeatOccupant` bot-takeover / endgame hot-join cutoff model, and `ModeHubScreen` (inside 2p & 4p with unfinished Online/Nearby options locked) are implemented.*
 
 **Test status:** NOT RUN by any agent so far (no Flutter toolchain in the chat sessions). First action for any agent with a shell: run `flutter pub get`, `flutter gen-l10n`, `flutter analyze`, `flutter test` and record the real result in the Change Log.
 
@@ -179,7 +180,7 @@ Priority: **P1** blocks Phase 4 / correctness, **P2** should fix soon, **P3** cl
 - **I-6 `cupertino_ui: any` in pubspec** has no stated reason and no import in the shown code. Project rule: no package without a reason. Either document the reason or remove it (verify nothing imports it first).
 - **I-7 iOS orientation mismatch.** `ios/Runner/Info.plist` still lists landscape orientations for iPhone; requirements say portrait only. `main.dart` locks portrait at runtime, but the plist should match. Android has no `screenOrientation` in the manifest (same situation).
 - **I-8 Sound.** [PARTIALLY FIXED 2026-11-20 by Antigravity] Added `audioplayers ^6.1.0`, `lib/core/audio/sound_service.dart` (`SoundService`), `ambientEnabled` setting in `SettingsState`/`SettingsScreen`, and wired `playTilePlace`, `playTileDraw`, `playPass`, and `startCafeAmbient`/`stopCafeAmbient` into `MatchController` and `GameScreen`. Missing files in `assets/audio/` are safely ignored. Owner still needs to place licensed `.mp3` files (`cafe_ambient.mp3`, `tile_place.mp3`, `tile_draw.mp3`, `tile_pass.mp3`) in `assets/audio/` and record their licenses in `docs/assets_licenses.md`.
-- **I-9 AI.** Computer players pick a random legal move (`_aiPlay`, `_autoPlayForMe`). Phase 5 replaces this. Keep the call sites small so a strategy interface can be dropped in.
+- **I-9 AI.** [FIXED 2026-11-24 by Antigravity] Replaced random legal moves in `_aiPlay` and `_autoPlayForMe` with pure-Dart `DominoAi.chooseMove` (`lib/ai/domino_ai.dart`) supporting `AiDifficulty.easy`, `medium`, `hard`, and `expert`.
 - **I-14 Tile size.** With `SerpentineLayout.minArmTiles` = 12 the fixed tile width is about 16 px on a 360x640 phone (felt about 179 px); each arm holds about 12 normal pieces, so about 25 in total. A very long round can fill one arm: extra pieces are drawn outside the frame and `overflow` is true. Options if the owner wants bigger tiles: lower `minArmTiles` more (more overflow risk) or enlarge the square (`_topReserve` in `game_screen.dart`).
 
 **P3**
@@ -258,6 +259,107 @@ Format: `- [OPEN|DONE] from → to (date): message`
 - Status/phase impact: <none | what moved>
 - Left for next agent: <what is unfinished, risks, traps>
 ```
+
+### 2026-11-24 01:15 — Antigravity — 10 Named AI Personas, SeatOccupant Bot-Takeover Model & ModeHubScreen (Locked Online/Nearby Modes)
+- Task asked by: owner (remove same-device Pass & Play; create 10 named AI characters with custom avatars; add ModeHubScreen inside 2p and 4p with Random Online, Friends Room/Seat Picker, and Wi-Fi/Bluetooth locked until their backend/network steps are built; prevent new human hot-joins when a match is near completion).
+- Changed:
+  - `lib/ai/ai_persona.dart` (new): 10 pure-Dart Iraqi AI personas (`أبو علي`, `حيدر`, `كرار`, `الحجّي جاسم`, `زيد`, `مصطفى`, `أوس`, `سجاد`, `نور`, `ريم`) with unique IDs, colors, `AiAvatarStyle`, and `pickDistinct`.
+  - `lib/engine/seat_occupant.dart` (new): pure-Dart `SeatOccupant` (`human` / `bot`) and `canAcceptHumanJoin` (blocks hot-joining once any team reaches >= 65% of `targetScore`).
+  - `lib/ui/widgets/ai_persona_avatar.dart` (new): `CustomPainter` portrait medallion rendering each persona's distinctive style (Sidara, Keffiyeh, Glasses, Mustache, Beard, Fez, Scarf, Crown, etc.).
+  - `lib/ui/widgets/player_chip.dart`: renders `AiPersonaAvatar` and a compact `AI` badge for bot-controlled seats.
+  - `lib/engine/game_rules_config.dart`, `lib/state/match_controller.dart`, `lib/ui/screens/game_screen.dart`: removed Pass & Play on one device; wired `seats` (`List<SeatOccupant>`), `replaceHumanWithBot`, and `tryHotJoinHuman` into `MatchController` and `GameScreen`.
+  - `lib/ui/screens/mode_selection_screen.dart`, `lib/ui/screens/mode_hub_screen.dart` (new): tapping 2 Players or 4 Players opens `ModeHubScreen`, where `Play vs AI` is active and `Random Match (Online)`, `Friends Room (Code / Seat Picker)`, and `Wi-Fi Direct / Bluetooth` are visibly locked (`Coming soon`).
+  - `test/ai/ai_persona_test.dart` (new), `test/state/match_controller_test.dart`, `test/ui/game_screen_test.dart`: updated and expanded unit/widget tests.
+  - `docs/architecture.md`, `AI_HANDOFF.md`: updated architecture and status.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Step 1 & Step 2 of the Multiplayer & AI Persona architecture complete; next step is RoomLobbyScreen (4-seat picker UI) + Local Wi-Fi Direct / Hotspot or Server & Accounts per owner priority.
+- Left for next agent: run `flutter analyze && flutter test`.
+
+### 2026-11-24 00:48 — Antigravity — Phase 6A: Local Multiplayer (Pass & Play + Human/AI Seat Presets)
+- Task asked by: owner (implement Step 6A of Phase 6: human/AI seat selection and Pass & Play on the same device with automatic hand privacy).
+- Changed:
+  - `lib/engine/game_rules_config.dart`: added `humanSeats` (`Set<int>`, default `{0}`), `isHumanSeat(int)`, and `isPassAndPlay` with deterministic set equality/hashing.
+  - `lib/state/match_controller.dart`: generalized human turn orchestration to support any `humanSeats` subset, added `activeHumanSeat`, `awaitingHandReveal`, and `revealHumanTurn()`, and replaced anonymous status record with `MatchStatus`.
+  - `lib/ui/screens/game_screen.dart`: rotated table seating dynamically around `match.activeHumanSeat` so the active human player always sits at the bottom rack, added face-down privacy curtain + `_PassDeviceBanner` when handing the phone between humans, and added clear player labels (`لاعب 1..4` / `كمبيوتر 1..4`) in Pass & Play mode.
+  - `lib/ui/screens/mode_selection_screen.dart`: added Players Setup selector (`Vs AI`, `2 Humans`, `4 Humans`) and wrapped content in `SingleChildScrollView` so `360x640` screens fit without overflow.
+  - `test/state/match_controller_test.dart`: added unit test verifying 2-player Pass & Play hand hiding, `revealHumanTurn()`, and turn handoff.
+  - `docs/architecture.md`, `AI_HANDOFF.md`: updated Phase 6A status and Change Log.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Phase 6A complete; Step 6B (Local Wi-Fi / Hotspot LAN) ready upon owner confirmation.
+- Left for next agent: run `flutter analyze && flutter test`.
+
+### 2026-11-24 00:26 — Antigravity — Adaptive UserPlayProfile learning, Bayesian hand prediction, 2p draw deduction & partner move analysis
+- Task asked by: owner (upgrade AI to continuously analyze own hand connectivity, predict other players' tiles, coordinate with and analyze its partner's moves, and learn from the human player's moves over time).
+- Changed:
+  - `lib/ai/user_play_profile.dart` (new): pure-Dart `UserPlayProfile` that observes every non-forced human move (`observeHumanMove`), learns the user's heavy-pip preference, double-shedding habit, self-suit building tendency, block aggressiveness, and favorite open numbers (0..6) via exponential moving average, and serializes via `encode`/`decode`.
+  - `lib/engine/round_state.dart`: enriched `playHistory` with `prevLeft`, `prevRight`, `openedEnd`, and `coveredEnd` for move-intent analysis, and added `drawHistory` so 2-player AI deduces missing numbers whenever a player draws from the boneyard.
+  - `lib/ai/domino_ai.dart`: added `_TableInference` (Bayesian posterior `probSeatHoldsPiece`/`probSeatHoldsSuit`, 2p `drawHistory` deduction, partner move-signal & hand-size coordination, expected opponent pip comparison on board locks, 2-ply lookahead resilience `_evaluateTwoPlyResilience`, and `UserPlayProfile` counter-play / partner assistance).
+  - `lib/state/match_controller.dart`: loads/saves `UserPlayProfile` under `'ai.user_play_profile'` in `SharedPreferences`, calls `_userProfile.observeHumanMove` on every human move, and passes `userProfile` into `DominoAi.chooseMove`.
+  - `test/ai/domino_ai_test.dart`: added unit tests for `UserPlayProfile` learning + serialization and 2-player `drawHistory` missing-number deduction.
+  - `docs/architecture.md`, `AI_HANDOFF.md`: documented the adaptive learning and Bayesian inference engine.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Phase 5 AI upgraded with adaptive user learning and deep inference.
+- Left for next agent: run `flutter analyze && flutter test`.
+
+### 2026-11-24 00:05 — Antigravity — Phase 5: Pure-Dart Domino AI (Easy, Medium, Hard, Expert) & UI integration
+- Task asked by: owner (proceed to Phase 5: AI difficulty levels and strategic decision-making).
+- Changed:
+  - `lib/ai/ai_difficulty.dart` (new): pure-Dart `AiDifficulty { easy, medium, hard, expert }` enum with persistent `id` and safe `byId` lookup.
+  - `lib/ai/domino_ai.dart` (new): pure-Dart `DominoAi.chooseMove` implementing 4 difficulty levels (Easy: short-sighted low-pip preference; Medium: high-pip/double shedding + basic suit keeping; Hard: played-tile counting, opponent pass-history blocking, and 4p partner pass protection; Expert: Bayesian unseen-tile weighting, partner lead protection, lock-bonus detection, and 1-ply opponent pressure lookahead).
+  - `lib/engine/round_state.dart`: added `playHistory` and `passHistory` so AI strategies can deduce which numbers opponents or partners lack and which numbers a partner opened.
+  - `lib/engine/game_rules_config.dart`: added `aiDifficulty` (`AiDifficulty.medium` default) to `GameRulesConfig` equality and hash.
+  - `lib/state/settings_provider.dart`: persisted `aiDifficulty` (`settings.ai_difficulty`) in `SettingsState` and `SettingsNotifier.setAiDifficulty`.
+  - `lib/state/match_controller.dart`: wired `DominoAi.chooseMove(_match.round, difficulty: arg.rules.aiDifficulty)` into `_aiPlay` and `_autoPlayForMe`.
+  - `lib/ui/localized_names.dart`: added `aiDifficultyName(bool isAr, AiDifficulty difficulty)`.
+  - `lib/ui/screens/mode_selection_screen.dart`, `lib/ui/screens/settings_screen.dart`: added AI difficulty `ChoiceChip` selector and passed `aiDifficulty` into `GameRulesConfig` when launching `GameScreen`.
+  - `test/ai/domino_ai_test.dart` (new): unit tests covering `AiDifficulty.byId`, determinism & legality across 2p/4p, heavy double shedding, opponent pass-history blocking, and Expert vs Easy multi-round win rate.
+  - `docs/architecture.md`, `AI_HANDOFF.md`: documented Phase 5 `lib/ai/` architecture and marked `I-9` fixed.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Phase 5 (AI) complete; ready for owner verification (`flutter analyze && flutter test`) and Phase 6 approval when ready.
+- Left for next agent: run `flutter analyze && flutter test`.
+
+### 2026-11-23 23:23 — Antigravity — Realistic woven baize cloth & Arabic arabesque ornaments in BoardFrame
+- Task asked by: owner (add richer Arabic arabesque ornamentation and more realistic cloth/felt texture to the playing table).
+- Changed:
+  - `lib/rendering/board_frame.dart`: upgraded `_IraqiFeltPainter` with realistic woven cloth weave + seeded micro-fibers (`_paintClothTexture`), 3D rail inner shadows (`_paintRailShadows`), Arabic corner arabesque spandrels + pointed ogee edge medallions + running pearl-diamond border (`_paintArabicBorder`), and an ornate 16-scallop + 8-petal Baghdadi arabesque central rosette (`_paintCenterArabesque`), all cached inside `RepaintBoundary`.
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Enhanced Iraqi/Arabic table artistry.
+- Left for next agent: run `flutter analyze && flutter test`.
+
+### 2026-11-23 23:20 — Antigravity — Iraqi heritage table design in BoardFrame
+- Task asked by: owner (design the playing table to reflect authentic Iraqi heritage).
+- Changed:
+  - `lib/rendering/board_frame.dart`: added `_IraqiFramePainter` (walnut wood filigree hairline + brass corner rivets) and cached `RepaintBoundary` `_IraqiFeltPainter` (emerald baize felt, subtle woven diamond lattice, recessed inner shadow, Baghdadi double-hairline gold inner border with corner/midpoint diamonds, and a faint central Iraqi 8-pointed star emblem).
+  - `AI_HANDOFF.md`: added Change Log entry.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Visual Iraqi heritage polish on `BoardFrame`.
+- Left for next agent: run `flutter analyze && flutter test`.
+
+### 2026-11-23 23:02 — Antigravity — 5-tab modern AppShellScreen & extensible GameCatalog
+- Task asked by: owner (modern bottom navigation bar with Home + Leaderboard, extensible Games tab for future games, Challenges, Shop, Profile/Settings, plus docs & handoff updates).
+- Changed:
+  - `lib/core/games/game_catalog.dart` (new): data-driven `GameEntry` and `GameCatalog.entries` (Iraqi Domino active + future game placeholders) so new games can be added under `lib/games/<id>/` without changing the shell.
+  - `lib/ui/screens/app_shell_screen.dart` (new): 5-tab modern bottom navigation shell (`IndexedStack`) with Home (quick play + leaderboard preview + settings icon), Games catalog, Challenges, Shop (live `TileSkin` selector), and Profile (settings + debug dev shortcuts).
+  - `lib/app.dart`: switched root `home` from `MainMenuScreen` to `AppShellScreen` (`main_menu_screen.dart` kept intact for now).
+  - `docs/requirements.md`, `docs/architecture.md`, `AI_HANDOFF.md`: documented the 5-tab shell and multi-game catalog architecture.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: no `flutter analyze`, `flutter test`, or build commands executed in this session).
+- Docs updated: `docs/requirements.md`, `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: App shell upgraded to extensible multi-game hub; ready for Phase 5 (AI) upon owner approval.
+- Left for next agent: run `flutter pub get && flutter gen-l10n && flutter analyze && flutter test`; proceed to Phase 5 (`lib/ai/`) when owner approves.
 
 ### 2026-11-20 02:55 — Antigravity — Audio system (Iraqi café ambience + place/draw/pass SFX)
 - Task asked by: owner (add Iraqi café background ambience toggleable in Settings, plus tile place, tile draw, and pass sound effects).

@@ -1,3 +1,5 @@
+import 'package:cupertino_ui/cupertino_ui.dart'
+    show GlobalCupertinoLocalizations;
 import 'package:flutter_localizations/flutter_localizations.dart'
     show GlobalWidgetsLocalizations;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'core/theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
 import 'state/settings_provider.dart';
-import 'ui/screens/main_menu_screen.dart';
+import 'ui/screens/app_shell_screen.dart';
 
 /// Root widget of the game.
 class IraqiDominoApp extends ConsumerWidget {
@@ -31,8 +33,9 @@ class IraqiDominoApp extends ConsumerWidget {
         GlobalMaterialLocalizations.delegate,
         // Text direction and basic widget translations.
         GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
       ],
-      home: const MainMenuScreen(),
+      home: const AppShellScreen(),
     );
   }
 }

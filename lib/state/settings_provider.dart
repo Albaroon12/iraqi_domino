@@ -3,6 +3,8 @@ import 'dart:ui' show Locale;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../ai/ai_difficulty.dart';
+
 /// Gives access to the device storage. It is created once in main()
 /// and injected here, so tests can replace it with a fake one.
 final sharedPreferencesProvider = Provider<SharedPreferences>(
@@ -20,6 +22,7 @@ class SettingsState {
     this.tileSkinId = 'ivory',
     this.soundEnabled = true,
     this.ambientEnabled = true,
+    this.aiDifficulty = AiDifficulty.medium,
   });
 
   static const List<String> supportedLanguages = ['ar', 'en'];
@@ -32,6 +35,7 @@ class SettingsState {
   final String tileSkinId;
   final bool soundEnabled;
   final bool ambientEnabled;
+  final AiDifficulty aiDifficulty;
 
   Locale get locale => Locale(languageCode);
 
@@ -41,6 +45,7 @@ class SettingsState {
     String? tileSkinId,
     bool? soundEnabled,
     bool? ambientEnabled,
+    AiDifficulty? aiDifficulty,
   }) {
     return SettingsState(
       languageCode: languageCode ?? this.languageCode,
@@ -48,6 +53,7 @@ class SettingsState {
       tileSkinId: tileSkinId ?? this.tileSkinId,
       soundEnabled: soundEnabled ?? this.soundEnabled,
       ambientEnabled: ambientEnabled ?? this.ambientEnabled,
+      aiDifficulty: aiDifficulty ?? this.aiDifficulty,
     );
   }
 }
@@ -59,6 +65,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
   static const _kTileSkin = 'settings.tile_skin';
   static const _kSound = 'settings.sound';
   static const _kAmbient = 'settings.ambient_sound';
+  static const _kAiDifficulty = 'settings.ai_difficulty';
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
@@ -82,6 +89,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       tileSkinId: prefs.getString(_kTileSkin) ?? defaults.tileSkinId,
       soundEnabled: prefs.getBool(_kSound) ?? defaults.soundEnabled,
       ambientEnabled: prefs.getBool(_kAmbient) ?? defaults.ambientEnabled,
+      aiDifficulty: AiDifficulty.byId(prefs.getString(_kAiDifficulty)),
     );
   }
 
@@ -108,6 +116,11 @@ class SettingsNotifier extends Notifier<SettingsState> {
   void setAmbientSound(bool enabled) {
     state = state.copyWith(ambientEnabled: enabled);
     _prefs.setBool(_kAmbient, enabled);
+  }
+
+  void setAiDifficulty(AiDifficulty difficulty) {
+    state = state.copyWith(aiDifficulty: difficulty);
+    _prefs.setString(_kAiDifficulty, difficulty.id);
   }
 }
 

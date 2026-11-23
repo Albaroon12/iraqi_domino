@@ -23,6 +23,8 @@ class BoardView extends StatelessWidget {
     this.activeEnds = const [],
     this.litEnds = const {},
     this.lastPlacedPiece,
+    this.lastPlacedKey,
+    this.hiddenPiece,
     this.onSlotTap,
   });
 
@@ -44,6 +46,13 @@ class BoardView extends StatelessWidget {
 
   /// Most recently played piece, subtly highlighted so players can spot it.
   final DominoPiece? lastPlacedPiece;
+
+  /// Key attached to the [DominoTile] of [lastPlacedPiece] so flight animations
+  /// can read its exact screen position, size, and orientation.
+  final GlobalKey? lastPlacedKey;
+
+  /// Piece temporarily hidden on the board while its flight overlay lands.
+  final DominoPiece? hiddenPiece;
 
   final void Function(BoardEnd end)? onSlotTap;
 
@@ -195,13 +204,20 @@ class BoardView extends StatelessWidget {
   }
 
   Widget _buildPlacedTile(LaidTile t, double w) {
-    final child = _tile(t, w);
+    final low = math.min(t.firstValue, t.secondValue);
+    final high = math.max(t.firstValue, t.secondValue);
     final last = lastPlacedPiece;
-    if (last == null) return child;
-    final matches =
-        math.min(t.firstValue, t.secondValue) == last.low &&
-        math.max(t.firstValue, t.secondValue) == last.high;
-    if (!matches) return child;
+    final matchesLast = last != null && low == last.low && high == last.high;
+    final hidden =
+        hiddenPiece != null &&
+        low == hiddenPiece!.low &&
+        high == hiddenPiece!.high;
+
+    Widget child = _tile(t, w, key: matchesLast ? lastPlacedKey : null);
+    if (hidden) {
+      return Opacity(opacity: 0, child: child);
+    }
+    if (!matchesLast) return child;
 
     return TweenAnimationBuilder<double>(
       key: ValueKey('last-$last'),
@@ -228,10 +244,11 @@ class BoardView extends StatelessWidget {
     );
   }
 
-  Widget _tile(LaidTile t, double w) {
+  Widget _tile(LaidTile t, double w, {Key? key}) {
     // Vertical box: no rotation, the first value is the top half.
     if (t.isVertical) {
       return DominoTile(
+        key: key,
         top: t.firstValue,
         bottom: t.secondValue,
         width: w,
@@ -241,6 +258,7 @@ class BoardView extends StatelessWidget {
     // Horizontal box: the tile is turned clockwise, so its "top" half ends
     // up on the right and its "bottom" half on the left.
     return DominoTile(
+      key: key,
       top: t.secondValue,
       bottom: t.firstValue,
       width: w,

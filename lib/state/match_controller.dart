@@ -3,12 +3,17 @@ import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../ai/ai_persona.dart';
+import '../ai/domino_ai.dart';
+import '../ai/user_play_profile.dart';
 import '../core/audio/sound_service.dart';
 import '../engine/board.dart';
 import '../engine/domino_piece.dart';
 import '../engine/game_rules_config.dart';
 import '../engine/match_state.dart';
 import '../engine/round_result.dart';
+import '../engine/seat_occupant.dart';
+import 'settings_provider.dart';
 
 /// Family argument identifying one match session.
 typedef MatchArgs = ({int playerCount, GameRulesConfig rules});
@@ -16,11 +21,21 @@ typedef MatchArgs = ({int playerCount, GameRulesConfig rules});
 /// Status pill kind shown when a player has no legal move.
 enum MatchStatusKind { noTiles, passes, draws }
 
+/// Status pill payload indicating which seat has no move or is drawing.
+class MatchStatus {
+  const MatchStatus({required this.seat, required this.kind});
+
+  final int seat;
+  final MatchStatusKind kind;
+}
+
 /// Immutable snapshot of a running match exposed to the UI.
 class MatchViewState {
   const MatchViewState({
     required this.playerCount,
     required this.rules,
+    required this.seats,
+    required this.canAcceptHumanJoin,
     required this.board,
     required this.hands,
     required this.boneyardCount,
@@ -45,6 +60,15 @@ class MatchViewState {
 
   final int playerCount;
   final GameRulesConfig rules;
+
+  /// Current occupant of each seat (`0..playerCount-1`). Seat 0 is the local
+  /// player; other seats hold either live players or distinct [AiPersona] bots.
+  final List<SeatOccupant> seats;
+
+  /// True while scores are still below the endgame cutoff so a disconnected
+  /// seat controlled by a temporary bot could still accept a live human join.
+  final bool canAcceptHumanJoin;
+
   final Board board;
   final List<List<DominoPiece>> hands;
   final int boneyardCount;
@@ -70,7 +94,7 @@ class MatchViewState {
   final List<Move> myMoves;
   final int secondsLeft;
   final int turnSeconds;
-  final ({int seat, MatchStatusKind kind})? status;
+  final MatchStatus? status;
   final RoundResult? roundResult;
   final int? matchWinnerTeam;
   final bool showResultPending;
@@ -88,7 +112,8 @@ class MatchViewState {
   ];
 }
 
-/// Riverpod controller owning one match's [MatchState], timers, and turn flow.
+/// Riverpod controller owning one match's [MatchState], seat occupants,
+/// timers, and turn flow.
 class MatchController extends Notifier<MatchViewState> {
   MatchController(this.arg);
 
@@ -100,16 +125,19 @@ class MatchController extends Notifier<MatchViewState> {
   static const Duration _revealDelay = Duration(milliseconds: 3200);
   static const int turnSeconds = 30;
   static const int _boneyardTableSlots = 14;
+  static const String _kUserPlayProfile = 'ai.user_play_profile';
 
   final math.Random _random = math.Random();
   late MatchState _match;
+  late UserPlayProfile _userProfile;
+  late List<SeatOccupant> _seats;
 
   List<Move> _myMoves = const [];
   List<DominoPiece?> _boneyardSlots = const [];
   Timer? _timer;
   Timer? _turnTimer;
   int _secondsLeft = turnSeconds;
-  ({int seat, MatchStatusKind kind})? _status;
+  MatchStatus? _status;
   bool _awaitingHumanDraw = false;
   bool _revealingRound = false;
   DominoPiece? _lastPlayedPiece;
@@ -125,6 +153,8 @@ class MatchController extends Notifier<MatchViewState> {
       _cancelTimers();
     });
 
+    _userProfile = _loadUserProfile();
+    _seats = _buildInitialOfflineSeats();
     _match = MatchState(
       playerCount: arg.playerCount,
       rules: arg.rules,
@@ -135,10 +165,90 @@ class MatchController extends Notifier<MatchViewState> {
     return _snapshot();
   }
 
-  /// Plays a human move for seat 0 if valid.
+  List<SeatOccupant> _buildInitialOfflineSeats() {
+    final bots = AiPersona.pickDistinct(arg.playerCount - 1, _random);
+    return <SeatOccupant>[
+      const SeatOccupant.human(nameAr: 'أنت', nameEn: 'You'),
+      for (final persona in bots) SeatOccupant.bot(persona),
+    ];
+  }
+
+  UserPlayProfile _loadUserProfile() {
+    try {
+      final prefs = ref.read(sharedPreferencesProvider);
+      return UserPlayProfile.decode(prefs.getString(_kUserPlayProfile));
+    } catch (_) {
+      return UserPlayProfile();
+    }
+  }
+
+  void _saveUserProfile() {
+    try {
+      final prefs = ref.read(sharedPreferencesProvider);
+      prefs.setString(_kUserPlayProfile, _userProfile.encode());
+    } catch (_) {
+      // Safe fallback when running in unit tests without SharedPreferences.
+    }
+  }
+
+  bool get _canAcceptHumanJoin => SeatOccupant.canAcceptHumanJoin(
+    scores: _match.scores,
+    targetScore: arg.rules.targetScore,
+    isMatchOver: _match.isOver,
+  );
+
+  /// Replaces a disconnected/departed human at [seat] (`1..playerCount-1`)
+  /// with a distinct [AiPersona] bot that immediately continues the match.
+  void replaceHumanWithBot(int seat) {
+    if (seat <= 0 || seat >= arg.playerCount) return;
+    final usedIds = <String>{
+      for (final s in _seats)
+        if (s.aiPersona != null) s.aiPersona!.id,
+    };
+    final persona = AiPersona.pickDistinct(
+      1,
+      _random,
+      excludeIds: usedIds,
+    ).first;
+    _seats[seat] = SeatOccupant.bot(
+      persona,
+      openForHumanJoin: _canAcceptHumanJoin,
+    );
+    if (_match.round.turn == seat && !_match.round.isOver) {
+      _prepareTurn();
+    }
+    _emit();
+  }
+
+  /// Replaces an open bot seat (`1..playerCount-1`) with a newly matched human
+  /// player if the match has not yet entered its endgame phase.
+  bool tryHotJoinHuman({
+    required int seat,
+    required String playerId,
+    required String nameAr,
+    required String nameEn,
+  }) {
+    if (seat <= 0 || seat >= arg.playerCount) return false;
+    final current = _seats[seat];
+    if (!current.isBot || !current.openForHumanJoin) return false;
+    if (!_canAcceptHumanJoin) return false;
+
+    _seats[seat] = SeatOccupant.human(
+      playerId: playerId,
+      nameAr: nameAr,
+      nameEn: nameEn,
+    );
+    _emit();
+    return true;
+  }
+
+  /// Plays a human move for seat 0 if valid, and lets the AI learn from the
+  /// player's decision.
   void playHumanMove(DominoPiece piece, BoardEnd end) {
     final move = Move(piece, end);
     if (_match.round.turn != 0 || !_myMoves.contains(move)) return;
+    _userProfile.observeHumanMove(_match.round, move, _myMoves);
+    _saveUserProfile();
     _lastPlayedPiece = piece;
     _match.play(move);
     ref.read(soundServiceProvider).playTilePlace();
@@ -239,6 +349,15 @@ class MatchController extends Notifier<MatchViewState> {
     if (round.isOver) {
       _status = null;
       _revealingRound = true;
+      // Refresh openForHumanJoin flags when scores cross the endgame cutoff.
+      if (!_canAcceptHumanJoin) {
+        for (var i = 1; i < _seats.length; i++) {
+          final s = _seats[i];
+          if (s.isBot && s.openForHumanJoin && s.aiPersona != null) {
+            _seats[i] = SeatOccupant.bot(s.aiPersona!, openForHumanJoin: false);
+          }
+        }
+      }
       _schedule(_revealDelay, () {
         if (_match.isOver) {
           _showResultPending = true;
@@ -267,7 +386,7 @@ class MatchController extends Notifier<MatchViewState> {
         return;
       }
 
-      _status = (
+      _status = MatchStatus(
         seat: seat,
         kind: canDraw
             ? MatchStatusKind.draws
@@ -306,13 +425,19 @@ class MatchController extends Notifier<MatchViewState> {
     });
   }
 
-  /// PROTOTYPE: random legal move on timeout. Replaced by AI in Phase 5.
+  /// Plays an AI-chosen move for seat 0 when the 30-second turn timer expires.
   void _autoPlayForMe() {
     if (_match.round.isOver || _match.round.turn != 0 || _myMoves.isEmpty) {
       return;
     }
-    final move = _myMoves[_random.nextInt(_myMoves.length)];
+    final move = DominoAi.chooseMove(
+      _match.round,
+      difficulty: arg.rules.aiDifficulty,
+      userProfile: _userProfile,
+    );
+    _lastPlayedPiece = move.piece;
     _match.play(move);
+    ref.read(soundServiceProvider).playTilePlace();
     _prepareTurn();
     _emit();
   }
@@ -331,9 +456,13 @@ class MatchController extends Notifier<MatchViewState> {
     _emit();
   }
 
-  /// PROTOTYPE: random legal move for AI seats. Replaced in Phase 5.
-  void _aiPlay(List<Move> moves) {
-    final move = moves[_random.nextInt(moves.length)];
+  /// Plays a strategic move for AI-controlled seats using [DominoAi].
+  void _aiPlay(List<Move> _) {
+    final move = DominoAi.chooseMove(
+      _match.round,
+      difficulty: arg.rules.aiDifficulty,
+      userProfile: _userProfile,
+    );
     _lastPlayedPiece = move.piece;
     _match.play(move);
     ref.read(soundServiceProvider).playTilePlace();
@@ -351,6 +480,8 @@ class MatchController extends Notifier<MatchViewState> {
     return MatchViewState(
       playerCount: arg.playerCount,
       rules: arg.rules,
+      seats: List<SeatOccupant>.unmodifiable(_seats),
+      canAcceptHumanJoin: _canAcceptHumanJoin,
       board: round.board,
       hands: [
         for (final hand in round.hands) List<DominoPiece>.unmodifiable(hand),

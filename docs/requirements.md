@@ -12,10 +12,18 @@ smooth animations, Arabic-first RTL UI (Modern Standard Arabic), English LTR.
 - Architecture must still allow other platforms later.
 
 ## Functional Requirements
-### Modes
-- 2 players: human vs human, human vs computer, online.
-- 4 players (2 teams): human/computer combinations, online.
-- Azneef: future, rules to be supplied by owner.
+### Modes & Multi-Game Hub
+- App shell: modern 5-tab bottom navigation bar:
+  1. Home (quick play + leaderboard preview + settings access)
+  2. Games (extensible game catalog hosting Iraqi Domino now and additional
+     traditional games in the future)
+  3. Challenges & Tournaments
+  4. Shop (tile skins live now; virtual-currency table themes/avatars later)
+  5. Profile & Settings
+- Iraqi Domino modes:
+  - 2 players: human vs human, human vs computer, online.
+  - 4 players (2 teams): human/computer combinations, online.
+  - Azneef: future, rules to be supplied by owner.
 
 ### Rules
 - As defined in game_rules.md (single source of truth).

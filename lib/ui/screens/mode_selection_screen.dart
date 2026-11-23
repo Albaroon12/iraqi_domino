@@ -5,21 +5,17 @@ import '../../l10n/app_localizations.dart';
 import '../../rendering/wood_table.dart';
 import '../../state/settings_provider.dart';
 import '../widgets/game_button.dart';
-import '../../engine/game_rules_config.dart';
-import 'game_screen.dart';
+import 'mode_hub_screen.dart';
 
-/// Lets the player choose between 2 players, 4 players and Azneef.
+/// Lets the player choose the main Domino table format: 2 Players, 4 Players,
+/// or Azneef (locked). Each format opens its dedicated [ModeHubScreen].
 class ModeSelectionScreen extends ConsumerWidget {
   const ModeSelectionScreen({super.key});
 
-  void _openGame(BuildContext context, int playerCount, int targetScore) {
+  void _openModeHub(BuildContext context, int playerCount) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => GameScreen(
-          playerCount: playerCount,
-          // The match gets its own copy of the rules at the moment it starts.
-          rules: GameRulesConfig(targetScore: targetScore),
-        ),
+        builder: (_) => ModeHubScreen(playerCount: playerCount),
       ),
     );
   }
@@ -27,7 +23,6 @@ class ModeSelectionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    // Watching the provider: this screen rebuilds if the target score changes.
     final targetScore = ref.watch(settingsProvider).targetScore;
     final targetText = l10n.targetScoreLabel(targetScore);
 
@@ -50,7 +45,7 @@ class ModeSelectionScreen extends ConsumerWidget {
                         subtitle: '${l10n.modeTwoPlayersDesc}\n$targetText',
                         icon: Icons.person_outline,
                         primary: true,
-                        onPressed: () => _openGame(context, 2, targetScore),
+                        onPressed: () => _openModeHub(context, 2),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -61,7 +56,7 @@ class ModeSelectionScreen extends ConsumerWidget {
                         subtitle: '${l10n.modeFourPlayersDesc}\n$targetText',
                         icon: Icons.groups_outlined,
                         primary: true,
-                        onPressed: () => _openGame(context, 4, targetScore),
+                        onPressed: () => _openModeHub(context, 4),
                       ),
                     ),
                     const SizedBox(height: 14),

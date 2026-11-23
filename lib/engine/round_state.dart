@@ -2,6 +2,38 @@ import 'board.dart';
 import 'domino_piece.dart';
 import 'round_result.dart';
 
+/// Public record of a move played during a round.
+class PlayedMoveRecord {
+  const PlayedMoveRecord({
+    required this.seat,
+    required this.move,
+    required this.prevLeft,
+    required this.prevRight,
+    required this.openedEnd,
+    required this.coveredEnd,
+  });
+
+  final int seat;
+  final Move move;
+  final int? prevLeft;
+  final int? prevRight;
+  final int openedEnd;
+  final int? coveredEnd;
+}
+
+/// Public record of a pass or boneyard draw and the open board ends at that moment.
+class TurnEventRecord {
+  const TurnEventRecord({
+    required this.seat,
+    required this.leftEnd,
+    required this.rightEnd,
+  });
+
+  final int seat;
+  final int leftEnd;
+  final int rightEnd;
+}
+
 /// The state of one round. Pure Dart.
 ///
 /// PROTOTYPE: a simple mutable version for the playable prototype.
@@ -46,6 +78,19 @@ class RoundState {
   /// Passes in a row. When everybody passed, the game is blocked.
   int consecutivePasses = 0;
 
+  /// Public log of every played move (seat, move, previous ends, and the new
+  /// outward number exposed by the move) during this round.
+  final List<PlayedMoveRecord> playHistory = [];
+
+  /// Public log of every pass (seat and the two open board numbers at the time)
+  /// so AI strategies can deduce which numbers a player lacks.
+  final List<TurnEventRecord> passHistory = [];
+
+  /// Public log of every boneyard draw in 2-player mode (seat and the two open
+  /// board numbers when the player had to draw), proving the player held
+  /// neither number before drawing.
+  final List<TurnEventRecord> drawHistory = [];
+
   RoundResult? result;
 
   bool get isOver => result != null;
@@ -82,8 +127,28 @@ class RoundState {
       throw StateError('Illegal move: $move');
     }
 
+    final prevLeft = board.leftEnd;
+    final prevRight = board.rightEnd;
+    final coveredEnd = board.isEmpty
+        ? null
+        : (move.end == BoardEnd.left ? prevLeft : prevRight);
+
     board.place(move.piece, move.end);
+    final openedEnd = move.end == BoardEnd.left
+        ? board.leftEnd!
+        : board.rightEnd!;
+
     hands[turn].remove(move.piece);
+    playHistory.add(
+      PlayedMoveRecord(
+        seat: turn,
+        move: move,
+        prevLeft: prevLeft,
+        prevRight: prevRight,
+        openedEnd: openedEnd,
+        coveredEnd: coveredEnd,
+      ),
+    );
     lastPlayedSeat = turn;
     consecutivePasses = 0;
 
@@ -106,6 +171,16 @@ class RoundState {
       throw StateError('Cannot draw: the player has a legal move');
     }
 
+    if (!board.isEmpty) {
+      drawHistory.add(
+        TurnEventRecord(
+          seat: turn,
+          leftEnd: board.leftEnd!,
+          rightEnd: board.rightEnd!,
+        ),
+      );
+    }
+
     final piece = index != null
         ? boneyard.removeAt(index)
         : boneyard.removeLast();
@@ -124,6 +199,15 @@ class RoundState {
       throw StateError('Cannot pass: the player must draw first');
     }
 
+    if (!board.isEmpty) {
+      passHistory.add(
+        TurnEventRecord(
+          seat: turn,
+          leftEnd: board.leftEnd!,
+          rightEnd: board.rightEnd!,
+        ),
+      );
+    }
     consecutivePasses++;
     if (consecutivePasses >= playerCount) {
       _finishBlocked();
