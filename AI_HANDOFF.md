@@ -6,7 +6,7 @@
 > The owner works with several agents on different days. No agent remembers
 > the previous one. This file is the memory.
 
-Last updated: 2026-11-24 by Antigravity. Completed Phase 5: pure-Dart AI (`lib/ai/ai_difficulty.dart`, `lib/ai/domino_ai.dart`) with 4 difficulty levels (Easy, Medium, Hard, Expert), play/pass history tracking in `RoundState`, difficulty selection in `ModeSelectionScreen` and `SettingsScreen`, unit tests in `test/ai/domino_ai_test.dart`, and pre-placement tile flight orientation morphing in `GameScreen`.
+Last updated: 2026-11-25 by Antigravity. Completed Phase 7 (Online Multiplayer & Accounts: Native Dark Launch, Animated Heritage `SplashScreen`, `GameLoadingOverlay`, `AuthScreen` with Sign-In/Register/Guest/Account Linking, Pure-Dart WebSocket + REST `DominoOnlineServer` in `lib/server/` & `bin/server.dart`, Unlocked Online Friends Rooms & Online Random Matchmaking, Live Home Leaderboard, Security/Anti-Cheat checks, and `Dockerfile`).
 
 ---
 
@@ -55,8 +55,9 @@ Roadmap source: `docs/roadmap.md`.
 | 3 | Playable prototype | **Essentially done**, but the owner rejected the old board look/line layout (see 3b). Being redone in steps R1-R6 (R1, R2 done). |
 | 4 | Real engine + rules + unit tests | **Done.** Pure-Dart `MatchState`, `RoundState`, `Dealer` (with invalid-deal prevention and 2p alternate draw), `GameRulesConfig`, and Riverpod `MatchController` with unit tests. |
 | 5 | AI (Easy/Medium/Hard/Expert) | **Done.** Pure-Dart `lib/ai/` (`AiDifficulty`, `DominoAi`, `UserPlayProfile`, 10 `AiPersona` characters) with 4 difficulty levels, Bayesian hand prediction, pass/draw deduction, 4p partner coordination, user-move learning, and unit tests. |
-| 6 | Local multiplayer (Wi-Fi Direct / Bluetooth) | **Prepared & Locked in ModeHubScreen.** Pass & Play on one phone cancelled by owner; `ModeHubScreen` shows `Play vs AI` (unlocked) and keeps `Random Online`, `Friends Room (Code & Seat Picker)`, and `Wi-Fi Direct / Bluetooth` locked until their respective networking/backend steps land. |
-| 7-11 | Online, profiles, shop, tournaments, release | Foundation started (`SeatOccupant` bot takeover & endgame hot-join cutoff in `lib/engine/seat_occupant.dart`). Server & accounts next. |
+| 6 | Local multiplayer (Offline Wi-Fi, Bluetooth, Local Wi-Fi) | **Done.** All 3 local channels unlocked in `ModeHubScreen` -> `LocalMultiplayerScreen` -> `RoomLobbyScreen` -> `GameScreen`, running on one unified protocol & authoritative engine (`lib/network/`) with first-party Android (`NearbyP2pBridge.kt`) and iOS (`NearbyP2pBridge.swift`) P2P bridges. |
+| 7 | Online (backend, accounts, rooms, matchmaking, sync, reconnect) | **Done.** Pure-Dart `DominoOnlineServer` (`lib/server/`, `bin/server.dart`, `Dockerfile`), `AuthScreen` (Guest + Sign-In + Guest stats linking), `OnlineFriendsRoomScreen`, `OnlineMatchmakingScreen` (auto-pairing, AI bot fill, disconnect takeover, reconnect seat reclaim), and anti-cheat validation. |
+| 8-11 | Profiles/progression, shop, tournaments, release | Foundation active (`GameDataCenter` stats/rating + live Home Leaderboard + Shop `TileSkin` selector). Expanded progression, virtual currency shop items, tournaments, and store release next. |
 
 **One-line summary:** *10 named AI personas (`AiPersona` + custom portraits), `SeatOccupant` bot-takeover / endgame hot-join cutoff model, and `ModeHubScreen` (inside 2p & 4p with unfinished Online/Nearby options locked) are implemented.*
 
@@ -259,6 +260,126 @@ Format: `- [OPEN|DONE] from → to (date): message`
 - Status/phase impact: <none | what moved>
 - Left for next agent: <what is unfinished, risks, traps>
 ```
+
+### 2026-11-25 14:49 — Antigravity — Step 7.6 (Phase 7 Complete): Server Security/Rate-Limiting, Live Home Leaderboard, Anti-Cheat Tests & Dockerfile
+- Task asked by: owner (complete all remaining work of Phase 7 without running analyze/test).
+- Changed:
+  - `lib/server/domino_online_server.dart`: added sliding-window IP rate limiting (`_allowRate`) to protect `/api/*` and `/ws` from flood attacks alongside authoritative move validation.
+  - `lib/ui/screens/app_shell_screen.dart`: wired `_HomeTab` Leaderboard dynamically to `gameDataCenterProvider` so the player's live rating and rank update automatically after matches.
+  - `test/server/domino_online_server_test.dart`: added anti-cheat forged-move rejection test.
+  - `Dockerfile` (new): multi-stage Docker build compiling `bin/server.dart` to a native Linux AOT executable (`/app/domino_server`).
+  - `AI_HANDOFF.md`: marked Phase 7 complete.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: owner runs `flutter analyze` and `flutter test`).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: **Phase 7 (Online Multiplayer & Accounts) is 100% complete.** Ready for Phase 8 (Expanded Profiles, Levels & Achievements) or Phase 9 (Virtual Currency & Shop Themes) upon owner approval.
+- Left for next agent: await owner approval for Phase 8 / Phase 9.
+
+### 2026-11-25 14:46 — Antigravity — Step 7.5: Online Random Matchmaking Unlocked (`OnlineMatchmakingScreen` & Server Auto-Pairing / Bot Fill / Hot-Join)
+- Task asked by: owner (proceed to Step 7.5 without running analyze/test; owner will run verification and report results).
+- Changed:
+  - `lib/server/domino_online_server.dart`: added `mode=matchmaking` queue handling on `/ws` that pairs searching players by `playerCount`, supports mid-match hot-join replacement when scores are `< 65%` of `targetScore`, reclaims seats on same-`playerId` reconnect, and auto-starts with `AiPersona` bot fill after `autoStartDelay` when the queue is quiet.
+  - `lib/network/transport/online_ws_transport.dart`, `lib/state/multiplayer_session_controller.dart`: added `isMatchmaking` mode and `startOnlineMatchmaking()`.
+  - `lib/ui/screens/online_matchmaking_screen.dart` (new), `lib/ui/screens/mode_hub_screen.dart`: unlocked "لعب عشوائي (أونلاين)" (`Random Match`), displaying `GameLoadingCard` with a live player counter (`1/4`..`4/4`) and automatic navigation into `GameScreen` on match launch.
+  - `test/server/domino_online_server_test.dart`: added automated test verifying 2-player online matchmaking auto-pairing and match start.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: owner will run `flutter analyze` and `flutter test` and provide the result).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Step 7.5 complete; all buttons in `ModeHubScreen` (Play vs AI, Local Play, Online Friends Room, and Online Random Match) are now unlocked and active! Next is Step 7.6 (Final Phase 7 security/load test & deployment docs).
+- Left for next agent: wait for owner test results, then complete Step 7.6.
+
+### 2026-11-25 14:40 — Antigravity — Step 7.4: Online Friends Rooms Unlocked (`OnlineWebSocketClientTransport` & `OnlineFriendsRoomScreen`)
+- Task asked by: owner (proceed to Step 7.4 without running analyze/test; owner will run verification and report results).
+- Changed:
+  - `lib/network/transport/online_ws_transport.dart` (new): `OnlineServerManager` (with auto-boot embedded `DominoOnlineServer` fallback for localhost testing) + `OnlineWebSocketClientTransport` implementing `PeerClientTransport` over WebSocket (`/ws?mode=host|join`) and polling `/api/rooms`.
+  - `lib/network/session/room_client_session.dart`, `lib/server/domino_online_server.dart`, `lib/state/multiplayer_session_controller.dart`: added `hostOnlineRoom`, `joinOnlineRoom`, and `requestStartMatch()` so the creator controls seat picking and match launch on the server room seamlessly.
+  - `lib/ui/screens/online_friends_room_screen.dart` (new), `lib/ui/screens/mode_hub_screen.dart`: unlocked "غرفة أصدقاء (أونلاين)" / "تحدي صديق (أونلاين)" with automatic 4-digit server room code creation, join by room number, browse open server rooms, and configurable server URL dialog.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: owner will run `flutter analyze` and `flutter test` and provide the result).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Step 7.4 complete; awaiting owner verification before Step 7.5 (Online Random Matchmaking + Bot Takeover & Reconnect).
+- Left for next agent: wait for owner test results, then build Step 7.5 (Online Random Matchmaking).
+
+### 2026-11-25 14:32 — Antigravity — Step 7.3: Pure-Dart WebSocket + REST Online Server (`lib/server/`, `bin/server.dart`) & HTTP Account Gateway
+- Task asked by: owner (proceed to Step 7.3 without running analyze/test; owner will run verification and report results).
+- Changed:
+  - `lib/engine/match_view_state.dart` (new), `lib/state/match_controller.dart`, `lib/network/protocol/wire_messages.dart`, `lib/network/session/authoritative_room_host.dart`: extracted pure-Dart `MatchViewState`/`MatchStatus` so `AuthoritativeRoomHost` and `WireEnvelope` have zero Flutter imports and run directly on the standalone Dart server.
+  - `lib/server/server_account_store.dart` (new): server-side account database with salted password hashing, Guest-to-Account stats/rating merging, token verification, and leaderboard sorting.
+  - `lib/server/domino_online_server.dart` (new), `bin/server.dart` (new): pure-Dart `HttpServer` + `WebSocket` online server handling `/api/auth/register`, `/api/auth/login`, `/api/profile/sync`, `/api/leaderboard`, `/api/rooms`, and `/ws` realtime authoritative rooms.
+  - `lib/network/http_account_gateway.dart` (new): `HttpRemoteAccountGateway` connecting `GameDataCenter` to the online server.
+  - `test/server/domino_online_server_test.dart` (new): integration tests verifying registration, Guest stats linking, login, leaderboard, and realtime WebSocket room hosting/joining.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: owner will run `flutter analyze` and `flutter test` and provide the result).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Step 7.3 complete; awaiting owner verification before Step 7.4 (Unlocking "غرفة أصدقاء أونلاين" in UI).
+- Left for next agent: wait for owner test results, then build Step 7.4 (Online Friends Rooms in `ModeHubScreen`).
+
+### 2026-11-25 14:26 — Antigravity — Step 7.2: AuthScreen (Sign-In, Create Account, Continue as Guest & Guest Account Linking)
+- Task asked by: owner (proceed to Step 7.2 without running analyze/test; owner will run verification and report results).
+- Changed:
+  - `lib/ui/screens/auth_screen.dart` (new): account gateway supporting Sign-In, Create & Link Account (preserving Guest stats & rating), and 1-tap Continue as Guest, wrapped in `GameLoadingOverlay`.
+  - `lib/data/game_data_center.dart`: added `signInWithEmail`, `registerWithEmail`, and automatic `markInitialEntryCompleted` persistence.
+  - `lib/ui/screens/splash_screen.dart`: routes first-time launches to `AuthScreen` and returning players directly to `AppShellScreen`.
+  - `lib/ui/screens/app_shell_screen.dart`: wired Profile tab with "تسجيل الدخول / ربط الحساب" for Guests and "تسجيل الخروج (المتابعة كضيف)" for Signed-In accounts.
+  - `test/helpers/test_app.dart`, `test/ui/auth_screen_test.dart` (new): added widget tests for first-launch `AuthScreen` Guest entry and account creation/linking.
+- Added/removed packages: none.
+- Verified: NOT RUN (by owner instruction: owner will run `flutter analyze` and `flutter test` and provide the result).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Step 7.2 complete; awaiting owner verification before Step 7.3 (Pure-Dart WebSocket + REST Server in `server/`).
+- Left for next agent: wait for owner test results, then build Step 7.3 (`server/`).
+
+### 2026-11-25 14:18 — Antigravity — Step 7.1: Native Dark Launch, Animated Heritage SplashScreen & GameLoadingOverlay
+- Task asked by: owner (adopt Pure-Dart WebSocket server architecture for Phase 7, walk step-by-step explaining every stage in detail, starting with Step 7.1: native dark launch + animated Splash Screen + Game Loading Screen).
+- Changed:
+  - `android/app/src/main/res/values/colors.xml` (new), `drawable/launch_background.xml`, `drawable-v21/launch_background.xml`, `values/styles.xml`, `values-night/styles.xml`, `ios/Runner/Base.lproj/LaunchScreen.storyboard`: replaced default white cold-start backgrounds with `#140B07` dark walnut on both Android (Light & Dark OS themes) and iOS.
+  - `lib/ui/screens/splash_screen.dart` (new), `lib/app.dart`: animated heritage Baghdadi `SplashScreen` featuring the fanned Dooshaysh (`6-6`) crest, 8-pointed geometric ornament, 3-stage boot progress bar, `GameDataCenter.verifyBootSession()`, and `SoundService.warmUp()`, fading smoothly into `AppShellScreen`.
+  - `lib/ui/widgets/game_loading_overlay.dart` (new), `lib/ui/screens/local_multiplayer_screen.dart`, `lib/ui/screens/room_lobby_screen.dart`: reusable `GameLoadingOverlay` and `GameLoadingCard` with an animated 3-domino wave, live status subtitle, rotating Iraqi Domino tips, and safe Cancel button.
+  - `lib/core/audio/sound_service.dart`, `lib/data/game_data_center.dart`: added `warmUp()`, `verifyBootSession()`, and `hasCompletedInitialEntry` / `markInitialEntryCompleted()` ready for Step 7.2 (`AuthScreen`).
+  - `test/ui/splash_and_loading_test.dart` (new): widget tests verifying `SplashScreen` boot stages + transition and `GameLoadingOverlay` wave + cancel handler.
+  - `docs/architecture.md`, `AI_HANDOFF.md`: recorded Dart WebSocket backend decision, marked I-12 cold-start white flash fixed, and logged Step 7.1.
+- Added/removed packages: none.
+- Verified:
+  - `flutter analyze`: PASSED (0 issues).
+  - `flutter test`: PASSED (90/90 tests, including `splash_and_loading_test.dart`).
+- Docs updated: `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Step 7.1 complete; next is Step 7.2 (`AuthScreen` — Sign-In, Register, Continue as Guest, and Upgrade Guest Account).
+- Left for next agent: proceed to Step 7.2 upon owner confirmation.
+
+### 2026-11-25 12:35 — Antigravity — Single Local Play Hub Button, Automatic 4-Digit Room Numbers & Smart Room Lookup
+- Task asked by: owner (single "اللعب المحلي" button on `ModeHubScreen` leading to a dedicated method-picker page; automatic 4-digit room code for Host; Joiner can either enter the 4-digit room number or browse available rooms; build APK for two-device testing).
+- Changed:
+  - `lib/ui/screens/mode_hub_screen.dart`: replaced the 3 inline local buttons with a single primary `اللعب المحلي` button navigating to `LocalMultiplayerScreen`.
+  - `lib/ui/screens/local_multiplayer_screen.dart`, `lib/ui/screens/room_lobby_screen.dart`: streamlined flow into (1) choose method (`واي فاي بدون إنترنت`, `بلوتوث`, `شبكة الواي فاي`), (2) create room with automatic 4-digit Room Number (`# 1000..9999`), and (3) join via segmented tabs (`إدخال رقم الغرفة` vs `الغرف المتاحة`).
+  - `lib/network/session/authoritative_room_host.dart`, `lib/network/session/room_client_session.dart`, `lib/network/transport/lan_socket_transport.dart`, `lib/network/transport/native_p2p_transport.dart`, `lib/network/transport/peer_transport.dart`: added automatic 4-digit room code generation, fixed default TCP game port (`41928`) with fallback, active UDP `IDOM_FIND1` room-code responder, and Hotspot gateway probing (`192.168.43.1`, `192.168.49.1`, `172.20.10.1`) so entering the 4-digit room number connects even if UDP broadcasts are blocked.
+  - `test/ui/game_screen_test.dart`, `test/network/local_multiplayer_session_test.dart`: updated widget test for the single `اللعب المحلي` button + segmented join tabs and verified 4-digit room number format.
+- Added/removed packages: none.
+- Verified:
+  - `flutter analyze`: PASSED (0 issues).
+  - `flutter test`: PASSED (88/88 tests).
+  - `flutter build apk --release`: PASSED (`build\app\outputs\flutter-apk\app-release.apk`, 51.2 MB).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Phase 6 UI & room-code UX finalized.
+- Left for next agent: proceed to Phase 7 Online server & account gateway when owner approves after physical device testing.
+
+### 2026-11-25 11:45 — Antigravity — Phase 6: 3 Local Multiplayer Channels (Offline Wi-Fi, Bluetooth, Local Wi-Fi) & Unified GameDataCenter (Guest + Sign-In Ready)
+- Task asked by: owner (add 3 local multiplayer options — Offline Wi-Fi without internet, Bluetooth, and Local Wi-Fi — with identical performance, backed by one unified Data Center ready for Phase 7 Online with Sign-In and Guest play).
+- Changed:
+  - `lib/data/player_account.dart`, `lib/data/game_data_center.dart` (new): single source of truth (`gameDataCenterProvider`) managing `PlayerAccount` (`AccountKind.guest` & `AccountKind.authenticated`, `AuthProviderKind`, persistent `guestDeviceId`, `PublicPlayerProfile`, `PlayerStats`, and pluggable `RemoteAccountGateway` for Phase 7).
+  - `lib/network/protocol/connection_channel.dart`, `lib/network/protocol/seat_mapper.dart`, `lib/network/protocol/wire_messages.dart` (new): pure-Dart compact JSON wire protocol (`< 600 bytes/frame`), per-viewer anti-cheat hand/boneyard masking (`MaskedMatchPayload`), and `SeatMapper` rotation.
+  - `lib/network/session/authoritative_room_host.dart`, `lib/network/session/room_client_session.dart` (new): pure-Dart authoritative room/match host & client sessions (reusable verbatim on Phase 7 WebSocket server) with lobby seat switching, `AiPersona` bot fill, disconnect bot-takeover, and same-`playerId` reconnect seat reclaim.
+  - `lib/network/transport/peer_transport.dart`, `lib/network/transport/lan_socket_transport.dart`, `lib/network/transport/native_p2p_transport.dart`, `lib/network/transport/transport_factory.dart` (new): `tcpNoDelay` socket + hotspot/subnet UDP discovery + `QuickConnectCodec` for `localWifi` and `wifiOffline`, plus native platform channel transport for `bluetooth`.
+  - `android/app/src/main/kotlin/com/albaron/iraqi_domino/NearbyP2pBridge.kt` (new), `MainActivity.kt`, `AndroidManifest.xml`: first-party Kotlin Bluetooth RFCOMM server/client + discovery + `WifiP2pManager` Wi-Fi Direct group owner + Android 12+/13+ permissions + portrait lock.
+  - `ios/Runner/NearbyP2pBridge.swift` (new), `AppDelegate.swift`, `Info.plist`: first-party Swift `MultipeerConnectivity` P2P bridge + Bluetooth/LocalNetwork plist keys + portrait lock.
+  - `lib/state/multiplayer_session_controller.dart` (new), `lib/state/match_controller.dart`, `lib/ui/screens/game_screen.dart`: wired multiplayer sessions into `GameScreen` with identical rendering/animations and centralized match stats recording in `GameDataCenter`.
+  - `lib/ui/screens/mode_hub_screen.dart`, `lib/ui/screens/local_multiplayer_screen.dart` (new), `lib/ui/screens/room_lobby_screen.dart` (new), `lib/ui/screens/app_shell_screen.dart`: unlocked all 3 local channels, built room browser + quick-code join + interactive 2/4-seat picker lobby, and connected Profile tab to `GameDataCenter`.
+  - `test/data/game_data_center_test.dart` (new), `test/network/local_multiplayer_session_test.dart` (new), `test/ui/game_screen_test.dart`: added unit, real loopback TCP socket, and widget tests.
+- Added/removed packages: none (used `dart:io` + first-party Kotlin/Swift platform channels to keep pinned Gradle 9.5 / AGP 9.3.1 untouched).
+- Verified:
+  - `flutter analyze`: PASSED (0 issues).
+  - `flutter test`: PASSED (88/88 tests, including `game_data_center_test`, `local_multiplayer_session_test` across all 3 local channels + real TCP loopback socket, and `ModeHubScreen` widget test).
+- Docs updated: `docs/requirements.md`, `docs/architecture.md`, `AI_HANDOFF.md`.
+- Status/phase impact: Phase 6 complete; ready for device P2P testing and Phase 7 (Online Backend, Sign-In & Guest Matchmaking/Rooms).
+- Left for next agent: verify Bluetooth & Wi-Fi Direct on physical Android/iOS devices; proceed to Phase 7 server & auth gateway when owner approves.
 
 ### 2026-11-24 01:15 — Antigravity — 10 Named AI Personas, SeatOccupant Bot-Takeover Model & ModeHubScreen (Locked Online/Nearby Modes)
 - Task asked by: owner (remove same-device Pass & Play; create 10 named AI characters with custom avatars; add ModeHubScreen inside 2p and 4p with Random Online, Friends Room/Seat Picker, and Wi-Fi/Bluetooth locked until their backend/network steps are built; prevent new human hot-joins when a match is near completion).

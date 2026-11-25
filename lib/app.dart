@@ -8,7 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'core/theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
 import 'state/settings_provider.dart';
-import 'ui/screens/app_shell_screen.dart';
+import 'ui/screens/splash_screen.dart';
 
 /// Root widget of the game.
 class IraqiDominoApp extends ConsumerWidget {
@@ -35,7 +35,7 @@ class IraqiDominoApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const AppShellScreen(),
+      home: const SplashScreen(),
     );
   }
 }

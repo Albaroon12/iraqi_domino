@@ -7,110 +7,19 @@ import '../ai/ai_persona.dart';
 import '../ai/domino_ai.dart';
 import '../ai/user_play_profile.dart';
 import '../core/audio/sound_service.dart';
+import '../data/game_data_center.dart';
 import '../engine/board.dart';
 import '../engine/domino_piece.dart';
 import '../engine/game_rules_config.dart';
 import '../engine/match_state.dart';
-import '../engine/round_result.dart';
+import '../engine/match_view_state.dart';
 import '../engine/seat_occupant.dart';
 import 'settings_provider.dart';
 
+export '../engine/match_view_state.dart';
+
 /// Family argument identifying one match session.
 typedef MatchArgs = ({int playerCount, GameRulesConfig rules});
-
-/// Status pill kind shown when a player has no legal move.
-enum MatchStatusKind { noTiles, passes, draws }
-
-/// Status pill payload indicating which seat has no move or is drawing.
-class MatchStatus {
-  const MatchStatus({required this.seat, required this.kind});
-
-  final int seat;
-  final MatchStatusKind kind;
-}
-
-/// Immutable snapshot of a running match exposed to the UI.
-class MatchViewState {
-  const MatchViewState({
-    required this.playerCount,
-    required this.rules,
-    required this.seats,
-    required this.canAcceptHumanJoin,
-    required this.board,
-    required this.hands,
-    required this.boneyardCount,
-    required this.boneyardSlots,
-    required this.awaitingHumanDraw,
-    required this.revealingRound,
-    required this.lastPlayedPiece,
-    required this.startSeat,
-    required this.openingPiece,
-    required this.turnSeat,
-    required this.scores,
-    required this.history,
-    required this.myMoves,
-    required this.secondsLeft,
-    required this.turnSeconds,
-    required this.status,
-    required this.roundResult,
-    required this.matchWinnerTeam,
-    required this.showResultPending,
-    required this.revision,
-  });
-
-  final int playerCount;
-  final GameRulesConfig rules;
-
-  /// Current occupant of each seat (`0..playerCount-1`). Seat 0 is the local
-  /// player; other seats hold either live players or distinct [AiPersona] bots.
-  final List<SeatOccupant> seats;
-
-  /// True while scores are still below the endgame cutoff so a disconnected
-  /// seat controlled by a temporary bot could still accept a live human join.
-  final bool canAcceptHumanJoin;
-
-  final Board board;
-  final List<List<DominoPiece>> hands;
-  final int boneyardCount;
-
-  /// Fixed 14-slot boneyard layout for 2-player mode (null = already drawn).
-  final List<DominoPiece?> boneyardSlots;
-
-  /// True when seat 0 (2 players) must pick a tile from the boneyard table.
-  final bool awaitingHumanDraw;
-
-  /// True right after a round ends while all players' remaining tiles are
-  /// revealed face-up and points are tallied on screen.
-  final bool revealingRound;
-
-  /// The most recently placed piece in the current round (highlighted briefly).
-  final DominoPiece? lastPlayedPiece;
-
-  final int startSeat;
-  final DominoPiece? openingPiece;
-  final int? turnSeat;
-  final List<int> scores;
-  final List<MatchRoundRecord> history;
-  final List<Move> myMoves;
-  final int secondsLeft;
-  final int turnSeconds;
-  final MatchStatus? status;
-  final RoundResult? roundResult;
-  final int? matchWinnerTeam;
-  final bool showResultPending;
-  final int revision;
-
-  bool get isFourPlayers => playerCount == 4;
-  bool get isMatchOver => matchWinnerTeam != null;
-
-  bool isPlayable(DominoPiece piece) =>
-      myMoves.any((move) => move.piece == piece);
-
-  List<BoardEnd> endsFor(DominoPiece piece) => [
-    for (final move in myMoves)
-      if (move.piece == piece) move.end,
-  ];
-}
 
 /// Riverpod controller owning one match's [MatchState], seat occupants,
 /// timers, and turn flow.
@@ -361,6 +270,17 @@ class MatchController extends Notifier<MatchViewState> {
       _schedule(_revealDelay, () {
         if (_match.isOver) {
           _showResultPending = true;
+          final won = _match.winnerTeam == 0;
+          final roundsWon = _match.history
+              .where((r) => r.result.winnerTeam == 0)
+              .length;
+          try {
+            ref.read(gameDataCenterProvider.notifier).recordMatchOutcome(
+                  won: won,
+                  ourScore: _match.scores[0],
+                  roundsWonInMatch: roundsWon,
+                );
+          } catch (_) {}
           _emit();
         } else {
           _revealingRound = false;

@@ -6,7 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Builds the whole app with a fake in-memory storage, for widget tests.
 Future<Widget> buildTestApp([Map<String, Object> saved = const {}]) async {
-  SharedPreferences.setMockInitialValues(saved);
+  SharedPreferences.setMockInitialValues({
+    'data_center.initial_entry_done': true,
+    ...saved,
+  });
   final prefs = await SharedPreferences.getInstance();
 
   return ProviderScope(

@@ -40,4 +40,33 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('ModeHubScreen shows single Local Play button and opens method & room hub', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('العب'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('أربعة لاعبين'));
+    await tester.pumpAndSettle();
+
+    // Single Local Play button on ModeHubScreen:
+    expect(find.text('اللعب المحلي'), findsOneWidget);
+
+    await tester.tap(find.text('اللعب المحلي'));
+    await tester.pumpAndSettle();
+
+    // Inside LocalMultiplayerScreen: 3 connection methods + Room Number & Available Rooms tabs:
+    expect(find.text('واي فاي بدون إنترنت'), findsOneWidget);
+    expect(find.text('بلوتوث'), findsOneWidget);
+    expect(find.text('شبكة الواي فاي (Wi-Fi)'), findsOneWidget);
+    expect(find.text('إدخال رقم الغرفة'), findsOneWidget);
+    expect(find.textContaining('الغرف المتاحة'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+  });
 }

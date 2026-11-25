@@ -4,12 +4,14 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/games/game_catalog.dart';
+import '../../data/game_data_center.dart';
 import '../../l10n/app_localizations.dart';
 import '../../rendering/domino_tile.dart';
 import '../../rendering/tile_skin.dart';
 import '../../state/settings_provider.dart';
 import '../localized_names.dart';
 import '../widgets/game_button.dart';
+import 'auth_screen.dart';
 import 'mode_selection_screen.dart';
 import 'settings_screen.dart';
 import 'table_preview_screen.dart';
@@ -266,12 +268,34 @@ class _HomeTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final skin = TileSkin.byId(ref.watch(settingsProvider).tileSkinId);
+    final account = ref.watch(gameDataCenterProvider);
 
-    const sampleLeaders = [
-      (rank: 1, nameAr: 'أبو علي البغدادي', nameEn: 'Abu Ali', pts: 2450),
-      (rank: 2, nameAr: 'حيدر المنصور', nameEn: 'Haider', pts: 2180),
-      (rank: 3, nameAr: 'كرار البصري', nameEn: 'Karrar', pts: 1940),
-    ];
+    final leaders = <({String nameAr, String nameEn, int pts, bool isMe})>[
+      (
+        nameAr: 'أبو علي البغدادي',
+        nameEn: 'Abu Ali',
+        pts: 1450,
+        isMe: false,
+      ),
+      (
+        nameAr: 'حيدر المنصور',
+        nameEn: 'Haider',
+        pts: 1280,
+        isMe: false,
+      ),
+      (
+        nameAr: 'كرار البصري',
+        nameEn: 'Karrar',
+        pts: 1120,
+        isMe: false,
+      ),
+      (
+        nameAr: account.displayName,
+        nameEn: account.displayName,
+        pts: account.rating,
+        isMe: true,
+      ),
+    ]..sort((a, b) => b.pts.compareTo(a.pts));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
@@ -366,10 +390,13 @@ class _HomeTab extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              isAr ? 'قريباً أونلاين' : 'Online soon',
+              isAr
+                  ? 'تقييمك: ${account.rating}'
+                  : 'Your Rating: ${account.rating}',
               style: TextStyle(
-                color: AppColors.ivory.withValues(alpha: 0.55),
+                color: AppColors.ivory.withValues(alpha: 0.72),
                 fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -378,7 +405,7 @@ class _HomeTab extends ConsumerWidget {
         _PanelCard(
           child: Column(
             children: [
-              for (var i = 0; i < sampleLeaders.length; i++) ...[
+              for (var i = 0; i < leaders.length; i++) ...[
                 if (i > 0)
                   Divider(
                     height: 16,
@@ -386,22 +413,24 @@ class _HomeTab extends ConsumerWidget {
                   ),
                 Row(
                   children: [
-                    _RankBadge(rank: sampleLeaders[i].rank),
+                    _RankBadge(rank: i + 1),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        isAr
-                            ? sampleLeaders[i].nameAr
-                            : sampleLeaders[i].nameEn,
-                        style: const TextStyle(
-                          color: AppColors.ivory,
+                        isAr ? leaders[i].nameAr : leaders[i].nameEn,
+                        style: TextStyle(
+                          color: leaders[i].isMe
+                              ? AppColors.gold
+                              : AppColors.ivory,
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: leaders[i].isMe
+                              ? FontWeight.w800
+                              : FontWeight.w600,
                         ),
                       ),
                     ),
                     Text(
-                      '${sampleLeaders[i].pts}',
+                      '${leaders[i].pts}',
                       style: const TextStyle(
                         color: AppColors.gold,
                         fontSize: 14,
@@ -749,7 +778,7 @@ class _ShopTab extends ConsumerWidget {
 // Tab 4: Profile & Settings
 // ---------------------------------------------------------------------------
 
-class _ProfileTab extends StatelessWidget {
+class _ProfileTab extends ConsumerWidget {
   const _ProfileTab({
     required this.l10n,
     required this.isAr,
@@ -764,8 +793,52 @@ class _ProfileTab extends StatelessWidget {
   final VoidCallback onOpenGallery;
   final VoidCallback onOpenTablePreview;
 
+  Future<void> _editName(
+    BuildContext context,
+    WidgetRef ref,
+    String currentName,
+  ) async {
+    final ctrl = TextEditingController(text: currentName);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF23140C),
+        title: Text(
+          isAr ? 'تعديل اسم اللاعب' : 'Edit Player Name',
+          style: const TextStyle(color: AppColors.gold, fontSize: 16),
+        ),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 24,
+          style: const TextStyle(color: AppColors.ivory),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text(
+              isAr ? 'حفظ' : 'Save',
+              style: const TextStyle(color: AppColors.gold),
+            ),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (updated != null && updated.trim().isNotEmpty) {
+      ref.read(gameDataCenterProvider.notifier).updateDisplayName(updated);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(gameDataCenterProvider);
+    final stats = account.stats;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
       children: [
@@ -779,48 +852,144 @@ class _ProfileTab extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _PanelCard(
-          child: Row(
+          child: Column(
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF4A3020),
-                  border: Border.all(color: AppColors.gold, width: 2),
-                ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: AppColors.ivory,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.playerYou,
-                      style: const TextStyle(
-                        color: AppColors.ivory,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+              Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF4A3020),
+                      border: Border.all(color: AppColors.gold, width: 2),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      isAr
-                          ? 'ضيف محلي — الإحصائيات والحسابات في المرحلة 8'
-                          : 'Local guest — stats & accounts arrive in Phase 8',
+                    child: Icon(
+                      account.isGuest
+                          ? Icons.person_rounded
+                          : Icons.verified_user_rounded,
+                      color: AppColors.ivory,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          account.displayName,
+                          style: const TextStyle(
+                            color: AppColors.ivory,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          account.isGuest
+                              ? (isAr
+                                    ? 'وضع الضيف نشط — التقييم: ${account.rating}'
+                                    : 'Guest Mode Active — Rating: ${account.rating}')
+                              : (isAr
+                                    ? 'حساب مسجل — التقييم: ${account.rating}'
+                                    : 'Signed-In — Rating: ${account.rating}'),
+                          style: TextStyle(
+                            color: AppColors.ivory.withValues(alpha: 0.7),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _editName(
+                      context,
+                      ref,
+                      account.displayName,
+                    ),
+                    icon: const Icon(Icons.edit_outlined, color: AppColors.gold),
+                    tooltip: isAr ? 'تعديل الاسم' : 'Edit name',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _StatMiniItem(
+                    label: isAr ? 'مباريات' : 'Matches',
+                    value: '${stats.matchesPlayed}',
+                  ),
+                  _StatMiniItem(
+                    label: isAr ? 'انتصارات' : 'Wins',
+                    value: '${stats.matchesWon}',
+                  ),
+                  _StatMiniItem(
+                    label: isAr ? 'أفضل سلسلة' : 'Best Streak',
+                    value: '${stats.bestWinStreak}',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _PanelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    account.isGuest
+                        ? Icons.cloud_upload_outlined
+                        : Icons.verified_user_rounded,
+                    color: AppColors.gold,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      account.isGuest
+                          ? (isAr
+                                ? 'أنت تلعب حالياً كضيف. يمكنك ربط حسابك لحفظ نقاطك وانتصاراتك.'
+                                : 'Playing as Guest. Link an account to save your progress.')
+                          : (isAr
+                                ? 'الحساب مربوط (${account.email ?? account.playerId})'
+                                : 'Linked Account (${account.email ?? account.playerId})'),
                       style: TextStyle(
-                        color: AppColors.ivory.withValues(alpha: 0.65),
-                        fontSize: 12,
+                        color: AppColors.ivory.withValues(alpha: 0.78),
+                        fontSize: 12.5,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
+              if (account.isGuest)
+                GameButton(
+                  label: isAr
+                      ? 'تسجيل الدخول / ربط الحساب'
+                      : 'Sign In / Link Account',
+                  icon: Icons.person_add_alt_1_rounded,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AuthScreen(popOnComplete: true),
+                      ),
+                    );
+                  },
+                )
+              else
+                GameButton(
+                  label: isAr
+                      ? 'تسجيل الخروج (المتابعة كضيف)'
+                      : 'Sign Out (Continue as Guest)',
+                  icon: Icons.logout_rounded,
+                  onPressed: () => ref
+                      .read(gameDataCenterProvider.notifier)
+                      .continueAsGuest(),
+                ),
             ],
           ),
         ),
@@ -842,6 +1011,37 @@ class _ProfileTab extends StatelessWidget {
             child: Text(l10n.tablePreview),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _StatMiniItem extends StatelessWidget {
+  const _StatMiniItem({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.gold,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.ivory.withValues(alpha: 0.65),
+            fontSize: 11.5,
+          ),
+        ),
       ],
     );
   }

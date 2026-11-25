@@ -21,23 +21,32 @@ import '../../rendering/domino_tile.dart';
 import '../../rendering/hidden_hand.dart';
 import '../../rendering/tile_skin.dart';
 import '../../state/match_controller.dart';
+import '../../state/multiplayer_session_controller.dart';
 import '../../state/settings_provider.dart';
 import '../widgets/game_button.dart';
 import '../widgets/player_chip.dart';
 
-/// The game screen (PROTOTYPE, Phase 3).
+/// The game screen.
 ///
 /// Seats, counter-clockwise from the bottom (4 players):
 /// 0 = you, 1 = right opponent, 2 = partner (top), 3 = left opponent.
 /// With 2 players: 0 = you, 1 = opponent (top).
 ///
 /// The match rules come from [rules] and never from the global settings.
+/// When [isMultiplayer] is true, state and moves flow through
+/// [multiplayerSessionProvider] (shared across Offline Wi-Fi, Bluetooth, Local
+/// Wi-Fi, and Online modes) with identical rendering and animations.
 class GameScreen extends ConsumerStatefulWidget {
-  const GameScreen({super.key, required this.playerCount, required this.rules})
-    : assert(playerCount == 2 || playerCount == 4);
+  const GameScreen({
+    super.key,
+    required this.playerCount,
+    required this.rules,
+    this.isMultiplayer = false,
+  }) : assert(playerCount == 2 || playerCount == 4);
 
   final int playerCount;
   final GameRulesConfig rules;
+  final bool isMultiplayer;
 
   @override
   ConsumerState<GameScreen> createState() => _GameScreenState();
@@ -111,11 +120,41 @@ class _GameScreenState extends ConsumerState<GameScreen>
   MatchArgs get _matchArgs =>
       (playerCount: widget.playerCount, rules: widget.rules);
 
-  MatchController get _controller =>
-      ref.read(matchControllerProvider(_matchArgs).notifier);
+  MatchViewState get _currentMatch {
+    if (widget.isMultiplayer) {
+      return ref.read(multiplayerSessionProvider).matchView!;
+    }
+    return ref.read(matchControllerProvider(_matchArgs));
+  }
 
-  MatchViewState get _currentMatch =>
-      ref.read(matchControllerProvider(_matchArgs));
+  void _dispatchPlayMove(DominoPiece piece, BoardEnd end) {
+    if (widget.isMultiplayer) {
+      ref.read(multiplayerSessionProvider.notifier).playHumanMove(piece, end);
+    } else {
+      ref.read(matchControllerProvider(_matchArgs).notifier).playHumanMove(
+            piece,
+            end,
+          );
+    }
+  }
+
+  void _dispatchDrawTile(int slotIndex) {
+    if (widget.isMultiplayer) {
+      ref.read(multiplayerSessionProvider.notifier).drawHumanTile(slotIndex);
+    } else {
+      ref.read(matchControllerProvider(_matchArgs).notifier).drawHumanTile(
+            slotIndex,
+          );
+    }
+  }
+
+  void _dispatchResetMatch() {
+    if (widget.isMultiplayer) {
+      ref.read(multiplayerSessionProvider.notifier).resetMatch();
+    } else {
+      ref.read(matchControllerProvider(_matchArgs).notifier).resetMatch();
+    }
+  }
 
   // ---------------------------------------------------------------------
   // Result dialogs & developer shortcut
@@ -139,9 +178,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
       if (!mounted) return;
       if (playAgain == true) {
         setState(_clearInteraction);
-        _controller.resetMatch();
+        _dispatchResetMatch();
       } else {
-        Navigator.of(context).pop();
+        if (widget.isMultiplayer) {
+          await ref.read(multiplayerSessionProvider.notifier).leaveSession();
+        }
+        if (mounted) Navigator.of(context).pop();
       }
     } finally {
       _dialogOpen = false;
@@ -150,8 +192,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   /// Developer shortcut: deal a fresh first round.
   void _redeal() {
+    if (widget.isMultiplayer) return;
     setState(_clearInteraction);
-    _controller.redeal();
+    ref.read(matchControllerProvider(_matchArgs).notifier).redeal();
   }
 
   // ---------------------------------------------------------------------
@@ -189,7 +232,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
     // Place the move immediately; BoardView hides _flyingToBoard while the
     // overlay tile glides into _lastPlacedKey's exact RenderBox.
-    _controller.playHumanMove(piece, end);
+    _dispatchPlayMove(piece, end);
 
     _flyOverlayTile(
       piece: piece,
@@ -217,7 +260,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final fromCenter = handKey == null ? null : _slotCenter(handKey);
     if (fromCenter == null) {
       setState(_clearInteraction);
-      _controller.playHumanMove(piece, end);
+      _dispatchPlayMove(piece, end);
       return;
     }
     _flyToBoard(
@@ -539,23 +582,64 @@ class _GameScreenState extends ConsumerState<GameScreen>
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final settings = ref.watch(settingsProvider);
     final skin = TileSkin.byId(settings.tileSkinId);
-    final match = ref.watch(matchControllerProvider(_matchArgs));
 
-    ref.listen<MatchViewState>(matchControllerProvider(_matchArgs), (
-      prev,
-      next,
-    ) {
-      if (prev?.turnSeat != next.turnSeat && next.turnSeat != 0) {
-        if (_dragging != null || _selected != null || _hoverEnd != null) {
-          setState(_clearInteraction);
+    final MatchViewState match;
+    if (widget.isMultiplayer) {
+      final netState = ref.watch(multiplayerSessionProvider);
+      ref.listen<MultiplayerSessionState>(multiplayerSessionProvider, (
+        prev,
+        next,
+      ) {
+        if (next.roomClosed && !(prev?.roomClosed ?? false)) {
+          if (mounted) Navigator.of(context).pop();
+          return;
         }
-      }
-      if (next.showResultPending && !(prev?.showResultPending ?? false)) {
-        _showResult(next);
-      }
-    });
+        final prevView = prev?.matchView;
+        final nextView = next.matchView;
+        if (nextView == null) return;
+        if (prevView?.turnSeat != nextView.turnSeat &&
+            nextView.turnSeat != 0) {
+          if (_dragging != null || _selected != null || _hoverEnd != null) {
+            setState(_clearInteraction);
+          }
+        }
+        if (nextView.showResultPending &&
+            !(prevView?.showResultPending ?? false)) {
+          _showResult(nextView);
+        }
+      });
 
-    return Scaffold(
+      final view = netState.matchView;
+      if (view == null) {
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
+      match = view;
+    } else {
+      match = ref.watch(matchControllerProvider(_matchArgs));
+      ref.listen<MatchViewState>(matchControllerProvider(_matchArgs), (
+        prev,
+        next,
+      ) {
+        if (prev?.turnSeat != next.turnSeat && next.turnSeat != 0) {
+          if (_dragging != null || _selected != null || _hoverEnd != null) {
+            setState(_clearInteraction);
+          }
+        }
+        if (next.showResultPending && !(prev?.showResultPending ?? false)) {
+          _showResult(next);
+        }
+      });
+    }
+
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop && widget.isMultiplayer) {
+          ref.read(multiplayerSessionProvider.notifier).leaveSession();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         toolbarHeight: 40,
         title: Text(
@@ -563,8 +647,8 @@ class _GameScreenState extends ConsumerState<GameScreen>
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
-          // Developer shortcut: hidden in release builds.
-          if (!kReleaseMode)
+          // Developer shortcut: hidden in release builds and multiplayer.
+          if (!kReleaseMode && !widget.isMultiplayer)
             IconButton(
               icon: const Icon(Icons.refresh, size: 20),
               padding: EdgeInsets.zero,
@@ -599,6 +683,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -806,7 +891,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
               child: _BoneyardDrawBoard(
                 slots: match.boneyardSlots,
                 skin: skin,
-                onPick: _controller.drawHumanTile,
+                onPick: _dispatchDrawTile,
               ),
             ),
           if (match.revealingRound && match.roundResult != null)

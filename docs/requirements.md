@@ -21,9 +21,11 @@ smooth animations, Arabic-first RTL UI (Modern Standard Arabic), English LTR.
   4. Shop (tile skins live now; virtual-currency table themes/avatars later)
   5. Profile & Settings
 - Iraqi Domino modes:
-  - 2 players: human vs human, human vs computer, online.
-  - 4 players (2 teams): human/computer combinations, online.
+  - 2 players: Play vs AI, 3 Local Multiplayer channels (Offline Wi-Fi / Hotspot / Wi-Fi Direct, Bluetooth, Local Wi-Fi), and Online.
+  - 4 players (2 teams): Play vs AI, 3 Local Multiplayer channels with seat/partner selection & AI bot fill, and Online.
   - Azneef: future, rules to be supplied by owner.
+- Unified Data & Account Hub:
+  - Single central `GameDataCenter` managing player identity across Guest mode ("اللعب كضيف") and Authenticated accounts (Phase 7 Sign-In), public peer profile, and cumulative player statistics across all offline, local, and online modes.
 
 ### Rules
 - As defined in game_rules.md (single source of truth).

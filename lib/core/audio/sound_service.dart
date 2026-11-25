@@ -84,6 +84,17 @@ class SoundService {
     }
   }
 
+  /// Pre-warms asset existence checks during [SplashScreen] boot so the first
+  /// tile placement in a match has zero lookup latency.
+  Future<void> warmUp() async {
+    await Future.wait([
+      _hasAsset(_cafeAmbientAsset),
+      _hasAsset(_tilePlaceAsset),
+      _hasAsset(_tileDrawAsset),
+      _hasAsset(_tilePassAsset),
+    ]);
+  }
+
   /// Plays the tile-placement clack sound.
   Future<void> playTilePlace() => _playSfx(_tilePlaceAsset);
 

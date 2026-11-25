@@ -10,9 +10,8 @@ Status: DRAFT v0.1
 4. ui/ (Flutter): screens, widgets, themes, localization (ar RTL, en LTR).
 5. rendering/: tile and table painting (widgets + CustomPainter first;
    evaluate Flame in Phase 3 only if animation needs justify it).
-6. data/: local persistence (settings, stats).
-7. network/ (Phase 7): WebSocket client; server reuses engine for
-   authoritative validation.
+6. data/: unified `GameDataCenter` & `PlayerAccount` (single source of truth for Guest & Authenticated accounts, public peer profiles, and cumulative match stats).
+7. network/: transport-agnostic authoritative room engine (`AuthoritativeRoomHost`, `RoomClientSession`, `SeatMapper`, anti-cheat `MaskedMatchPayload`) + 3 Local Multiplayer transports (`wifiOffline`, `bluetooth`, `localWifi`) with identical framing & performance, directly reusable by the Phase 7 Online WebSocket server.
 
 ## Key Decisions
 - Riverpod: simple, testable, less boilerplate than Bloc here.
@@ -20,7 +19,8 @@ Status: DRAFT v0.1
   and reuse on a future Dart server.
 - Rules live in GameRulesConfig, so Azneef can be added as a variant
   (spinner support) without rewriting core logic.
-- Backend decision deferred to Phase 7 (Firebase vs Dart WebSocket server).
+-Backend decision (confirmed 2026-11-25): Pure-Dart WebSocket + REST server (`server/`) reusing `lib/engine/`, `lib/ai/`, and `lib/network/` directly, paired with `GameDataCenter` (`Guest` + `Authenticated` accounts).
+-Startup & loading UX: Native OS launch screens (`#140B07` dark walnut on Android & iOS) transition without white flash into `SplashScreen` (`lib/ui/screens/splash_screen.dart`), which verifies `GameDataCenter` session state and pre-warms `SoundService` assets before fading into `AppShellScreen`. Network/room/matchmaking waits display `GameLoadingOverlay` (`lib/ui/widgets/game_loading_overlay.dart`).
 - Settings live in a Riverpod NotifierProvider (immutable SettingsState),
   persisted with shared_preferences (small key/value data only). Storage is
   injected via sharedPreferencesProvider so tests use a fake one. Invalid

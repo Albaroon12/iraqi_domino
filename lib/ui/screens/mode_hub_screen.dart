@@ -12,13 +12,17 @@ import '../localized_names.dart';
 import '../widgets/ai_persona_avatar.dart';
 import '../widgets/game_button.dart';
 import 'game_screen.dart';
+import 'local_multiplayer_screen.dart';
+import 'online_friends_room_screen.dart';
+import 'online_matchmaking_screen.dart';
 
-/// Hub screen inside a chosen player-count mode (2 Players or 4 Players),
-/// presenting all ways to play that mode:
-/// - Offline vs named AI characters (unlocked and playable now)
-/// - Local Wi-Fi Direct / Bluetooth (locked until Phase 6 LAN/Nearby is enabled)
-/// - Random Online Matchmaking with AI disconnect takeover (locked until Phase 7)
-/// - Private Room / Invite Friends with seat selection (locked until Phase 7)
+/// Hub screen inside a chosen player-count mode (2 Players or 4 Players):
+/// 1. Offline vs named AI characters (unlocked)
+/// 2. Single "اللعب المحلي" button opening [LocalMultiplayerScreen] where the
+///    player chooses the connection method (Offline Wi-Fi, Bluetooth, or Wi-Fi),
+///    hosts with an automatic 4-digit room number, or joins by room number /
+///    browsing available rooms.
+/// 3. Online Matchmaking & Friends Room (locked until Phase 7 server).
 class ModeHubScreen extends ConsumerWidget {
   const ModeHubScreen({super.key, required this.playerCount})
     : assert(playerCount == 2 || playerCount == 4);
@@ -29,6 +33,33 @@ class ModeHubScreen extends ConsumerWidget {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => GameScreen(playerCount: playerCount, rules: rules),
+      ),
+    );
+  }
+
+  void _openLocalPlay(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LocalMultiplayerScreen(playerCount: playerCount),
+      ),
+    );
+  }
+
+  void _openOnlineFriendsRoom(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OnlineFriendsRoomScreen(playerCount: playerCount),
+      ),
+    );
+  }
+
+  void _startOnlineRandomMatch(BuildContext context, GameRulesConfig rules) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OnlineMatchmakingScreen(
+          playerCount: playerCount,
+          rules: rules,
+        ),
       ),
     );
   }
@@ -56,28 +87,26 @@ class ModeHubScreen extends ConsumerWidget {
               ? 'Team up & compete with the 10 named AI personas'
               : 'Challenge one of the 10 named AI personas');
 
+    final localPlayLabel = isAr ? 'اللعب المحلي' : 'Local Play';
+    final localPlayDesc = isAr
+        ? 'اختر الطريقة: واي فاي بدون إنترنت • بلوتوث • Wi-Fi'
+        : 'Choose method: Offline Wi-Fi • Bluetooth • Wi-Fi';
+
     final randomOnlineLabel = isAr ? 'لعب عشوائي (أونلاين)' : 'Random Match';
     final randomOnlineDesc = isAr
-        ? 'قريباً — بحث تلقائي مع حلول AI مكان المنقطع حتى دخول بديل'
-        : 'Coming soon — Matchmaking with seamless AI bot takeover';
+        ? 'بحث تلقائي عبر السيرفر (بحسابك أو كضيف) مع حلول AI مكان المنقطع'
+        : 'Automatic server matchmaking with seamless AI bot takeover';
 
     final friendsRoomLabel = isAr
-        ? (four ? 'غرفة أصدقاء (اختيار المقاعد)' : 'تحدي صديق (كود أو دعوة)')
-        : (four ? 'Friends Room (Seat Picker)' : 'Play with Friend (Code)');
+        ? (four ? 'غرفة أصدقاء (أونلاين)' : 'تحدي صديق (أونلاين)')
+        : (four ? 'Online Friends Room' : 'Online Friend Match');
     final friendsRoomDesc = isAr
         ? (four
-              ? 'قريباً — أنشئ غرفة لـ 4 أصدقاء بالكود واختر مكانك ضد زميلك'
-              : 'قريباً — ادعُ صديقك بكود غرفة أو دعوة داخل اللعبة')
+              ? 'أنشئ غرفة على السيرفر برقم تلقائي واختر المقاعد والشريك'
+              : 'ادعُ صديقك عبر الإنترنت برقم الغرفة أو من الغرف المتاحة')
         : (four
-              ? 'Coming soon — Invite 4 friends by code & pick team seats'
-              : 'Coming soon — Invite a friend via room code or in-game invite');
-
-    final nearbyLabel = isAr
-        ? 'واي فاي مباشر / بلوتوث'
-        : 'Wi-Fi Direct / Bluetooth';
-    final nearbyDesc = isAr
-        ? 'قريباً — العب مع أصدقائك القريبين بدون إنترنت'
-        : 'Coming soon — Play with friends nearby offline';
+              ? 'Create an online server room & pick team seats'
+              : 'Invite a friend online via room number');
 
     return Scaffold(
       appBar: AppBar(toolbarHeight: 48, title: Text(title)),
@@ -91,7 +120,7 @@ class ModeHubScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Active Mode: Vs AI + AI Difficulty + Persona preview
+                    // 1. Play vs AI
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
@@ -119,7 +148,6 @@ class ModeHubScreen extends ConsumerWidget {
                                   ),
                                 ),
                               ),
-                              // Mini preview of 4 AI persona portraits
                               for (var i = 0; i < 4; i++)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 4),
@@ -168,34 +196,43 @@ class ModeHubScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Locked Online & Local Direct options (enabled as each phase lands)
+
+                    // 2. Single "Local Play" Button -> opens method & room hub
                     SizedBox(
                       width: double.infinity,
                       child: GameButton(
-                        label: randomOnlineLabel,
-                        subtitle: randomOnlineDesc,
-                        icon: Icons.lock_outline,
-                        onPressed: null,
+                        label: localPlayLabel,
+                        subtitle: localPlayDesc,
+                        icon: Icons.wifi_tethering_rounded,
+                        primary: true,
+                        onPressed: () => _openLocalPlay(context),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
+
+                    // 3. Online Friends Room (UNLOCKED in Step 7.4!)
                     SizedBox(
                       width: double.infinity,
                       child: GameButton(
                         label: friendsRoomLabel,
                         subtitle: friendsRoomDesc,
-                        icon: Icons.lock_outline,
-                        onPressed: null,
+                        icon: Icons.cloud_outlined,
+                        primary: true,
+                        onPressed: () => _openOnlineFriendsRoom(context),
                       ),
                     ),
                     const SizedBox(height: 10),
+
+                    // 4. Online Random Matchmaking (UNLOCKED in Step 7.5!)
                     SizedBox(
                       width: double.infinity,
                       child: GameButton(
-                        label: nearbyLabel,
-                        subtitle: nearbyDesc,
-                        icon: Icons.lock_outline,
-                        onPressed: null,
+                        label: randomOnlineLabel,
+                        subtitle: randomOnlineDesc,
+                        icon: Icons.public_rounded,
+                        primary: true,
+                        onPressed: () =>
+                            _startOnlineRandomMatch(context, rules),
                       ),
                     ),
                   ],
