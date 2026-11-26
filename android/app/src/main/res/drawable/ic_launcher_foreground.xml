@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Gold-bordered Charcoal [6|6] Domino emblem inside Android adaptive safe zone (30..78) -->
+    <path
+        android:fillColor="#E7BB50"
+        android:pathData="M41,26 L67,26 A5,5 0 0,1 72,31 L72,77 A5,5 0 0,1 67,82 L41,82 A5,5 0 0,1 36,77 L36,31 A5,5 0 0,1 41,26 Z" />
+    <path
+        android:fillColor="#182022"
+        android:pathData="M41.5,28 L66.5,28 A3.5,3.5 0 0,1 70,31.5 L70,76.5 A3.5,3.5 0 0,1 66.5,80 L41.5,80 A3.5,3.5 0 0,1 38,76.5 L38,31.5 A3.5,3.5 0 0,1 41.5,28 Z" />
+    <!-- Center divider -->
+    <path
+        android:fillColor="#E7BB50"
+        android:pathData="M41,53.2h26v1.6h-26z" />
+    <!-- Top 6 gold pips -->
+    <path android:fillColor="#F7CB62" android:pathData="M46,34.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M62,34.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M46,41.0 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M62,41.0 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M46,47.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M62,47.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <!-- Bottom 6 gold pips -->
+    <path android:fillColor="#F7CB62" android:pathData="M46,60.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M62,60.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M46,67.0 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M62,67.0 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M46,73.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+    <path android:fillColor="#F7CB62" android:pathData="M62,73.5 m-2.3,0 a2.3,2.3 0 1,0 4.6,0 a2.3,2.3 0 1,0 -4.6,0" />
+</vector>

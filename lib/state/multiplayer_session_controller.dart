@@ -472,6 +472,9 @@ class MultiplayerSessionController extends Notifier<MultiplayerSessionState> {
             roundsLost++;
           }
         }
+        final isOnlineChannel =
+            state.channel == SessionChannel.onlineRoom ||
+            state.channel == SessionChannel.onlineRandom;
         ref.read(gameDataCenterProvider.notifier).recordMatchOutcome(
               won: won,
               ourScore: view.scores[0],
@@ -481,7 +484,7 @@ class MultiplayerSessionController extends Notifier<MultiplayerSessionState> {
               dominoWinsInMatch: dominoWins,
               blockedWinsInMatch: blockedWins,
               highestRoundPoints: highestRound,
-              isOnlineMatch: true,
+              isOnlineMatch: isOnlineChannel,
             );
       }
     } else if (!view.isMatchOver && view.history.isEmpty) {

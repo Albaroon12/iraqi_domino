@@ -35,13 +35,15 @@ class GameEntry {
 class GameCatalog {
   GameCatalog._();
 
+  static const String defaultGameId = 'iraqi_domino';
+
   static final List<GameEntry> entries = [
     GameEntry(
       id: 'iraqi_domino',
       titleAr: 'الدومينو العراقي',
       titleEn: 'Iraqi Domino',
-      subtitleAr: 'لاعبان، أربعة لاعبين (شراكة)، وأزنيف قريباً',
-      subtitleEn: '2 players, 4 players (partners), Azneef coming soon',
+      subtitleAr: 'لاعبان أو أربعة لاعبين',
+      subtitleEn: '2 or 4 players',
       icon: Icons.casino_rounded,
       available: true,
       builder: (_) => const ModeSelectionScreen(),
@@ -50,8 +52,8 @@ class GameCatalog {
       id: 'backgammon',
       titleAr: 'طاولة الزهر',
       titleEn: 'Backgammon',
-      subtitleAr: 'قريباً — لعبة المقاهي الكلاسيكية',
-      subtitleEn: 'Coming soon — classic café board game',
+      subtitleAr: 'قريباً في المقهى',
+      subtitleEn: 'Coming soon',
       icon: Icons.grid_view_rounded,
       available: false,
     ),
@@ -59,10 +61,17 @@ class GameCatalog {
       id: 'cards',
       titleAr: 'ألعاب الورق',
       titleEn: 'Card Games',
-      subtitleAr: 'قريباً — تحديات ورق جماعية',
-      subtitleEn: 'Coming soon — multiplayer card challenges',
+      subtitleAr: 'قريباً في المقهى',
+      subtitleEn: 'Coming soon',
       icon: Icons.style_rounded,
       available: false,
     ),
   ];
+
+  static GameEntry byId(String? id) {
+    for (final entry in entries) {
+      if (entry.id == id) return entry;
+    }
+    return entries.first;
+  }
 }

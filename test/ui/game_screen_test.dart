@@ -101,4 +101,57 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('Bottom dock ordered left-to-right and Games tab switches & persists active Home game', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pumpAndSettle();
+
+    // 1. Verify physical left-to-right bottom bar order:
+    // ملفي < الألعاب < الرئيسية < المهام < السوق
+    final xProfile = tester.getCenter(find.text('ملفي')).dx;
+    final xGames = tester.getCenter(find.text('الألعاب')).dx;
+    final xHome = tester.getCenter(find.text('الرئيسية')).dx;
+    final xTasks = tester.getCenter(find.text('المهام')).dx;
+    final xShop = tester.getCenter(find.text('السوق')).dx;
+    expect(xProfile, lessThan(xGames));
+    expect(xGames, lessThan(xHome));
+    expect(xHome, lessThan(xTasks));
+    expect(xTasks, lessThan(xShop));
+
+    // 2. Verify Home shows only Local Play & Practice cards beneath Play:
+    expect(find.text('لعب محلي'), findsOneWidget);
+    expect(find.text('تدريب'), findsOneWidget);
+    expect(find.text('فرق 2×2'), findsNothing);
+    expect(find.text('المزيد'), findsNothing);
+
+    // 3. Switch to Games tab -> tap تشغيل on طاولة الزهر -> returns to Home with Backgammon & its Leaderboard!
+    await tester.tap(find.text('الألعاب'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('طاولة الزهر'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('المتصدرين — طاولة الزهر'), findsOneWidget);
+
+    // Tap the shaded Leaderboard button -> opens the Podium Leaderboard popup sheet!
+    await tester.ensureVisible(find.text('المتصدرين — طاولة الزهر'));
+    await tester.tap(find.text('المتصدرين — طاولة الزهر'));
+    await tester.pumpAndSettle();
+    expect(find.text('التصنيف'), findsOneWidget);
+    expect(find.text('كل الوقت'), findsOneWidget);
+    expect(find.text('الشهر'), findsOneWidget);
+    expect(find.text('الأسبوع'), findsOneWidget);
+
+    // 4. Reopening the app with saved settings.selected_game restores طاولة الزهر on Home!
+    await tester.pumpWidget(
+      await buildTestApp({'settings.selected_game': 'backgammon'}),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('المتصدرين — طاولة الزهر'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+  });
 }

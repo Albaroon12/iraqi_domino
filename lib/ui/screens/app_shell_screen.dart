@@ -7,31 +7,35 @@ import '../../core/constants/app_colors.dart';
 import '../../core/games/game_catalog.dart';
 import '../../core/network/connectivity_provider.dart';
 import '../../core/theme/maqha_design_system.dart';
-import '../../data/cafe_events_and_tournaments.dart';
 import '../../data/cafe_progression.dart';
 import '../../data/game_data_center.dart';
 import '../../data/player_account.dart';
 import '../../engine/game_rules_config.dart';
 import '../../l10n/app_localizations.dart';
+import '../../rendering/domino_tile.dart';
+import '../../rendering/tile_skin.dart';
 import '../../state/settings_provider.dart';
 import '../widgets/ai_persona_avatar.dart';
 import '../widgets/cafe_avatar_frame.dart';
 import '../widgets/cafe_prop_widget.dart';
 import '../widgets/game_button.dart';
+import '../widgets/maqha_leaderboard_sheet.dart';
 import 'auth_screen.dart';
 import 'cafe_shop_view.dart';
 import 'cafe_tournaments_view.dart';
 import 'game_screen.dart';
 import 'local_multiplayer_screen.dart';
 import 'mode_hub_screen.dart';
-import 'mode_selection_screen.dart';
 import 'settings_screen.dart';
 import 'table_preview_screen.dart';
 import 'tile_gallery_screen.dart';
 
 /// Portrait **المقهى** shell styled 1:1 after the Emerald-Teal, Matte Charcoal,
-/// and Warm Amber-Gold reference design with a floating glass capsule dock:
-/// 0 = Games, 1 = Tasks & Cups, 2 = Main Hall (default), 3 = Shop, 4 = Profile.
+/// and Warm Amber-Gold reference design with a floating glass capsule dock.
+///
+/// Physical left-to-right dock order:
+/// 0 = Profile (`ملفي`), 1 = Games (`الألعاب`), 2 = Home (`الرئيسية`),
+/// 3 = Tasks (`المهام`), 4 = Shop (`السوق`).
 class AppShellScreen extends ConsumerStatefulWidget {
   const AppShellScreen({super.key});
 
@@ -46,11 +50,34 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
+  void _showSoonMessage(bool isAr, String gameTitle) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: MaqhaColors.cardCharcoalElevated,
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            isAr
+                ? '$gameTitle ستُفتح قريباً في المقهى'
+                : '$gameTitle opens soon in Al-Maqha',
+            style: const TextStyle(
+              color: MaqhaColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final conn = ref.watch(connectivityProvider);
+    final settings = ref.watch(settingsProvider);
+    final selectedGame = GameCatalog.byId(settings.selectedGameId);
 
     if (!conn.isOnline) {
       return _OfflineOnlyCafeScreen(
@@ -74,42 +101,7 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
           child: IndexedStack(
             index: _tabIndex,
             children: [
-              _GamesTab(
-                isAr: isAr,
-                onOpenGame: (entry) {
-                  final builder = entry.builder;
-                  if (entry.available && builder != null) {
-                    Navigator.of(
-                      context,
-                    ).push(MaterialPageRoute<void>(builder: builder));
-                  }
-                },
-              ),
-              CafeTournamentsView(isAr: isAr),
-              _HomeHallTab(
-                l10n: l10n,
-                isAr: isAr,
-                onQuickPlay: () => _open(const ModeSelectionScreen()),
-                onOpen2v2Teams: () => _open(const ModeHubScreen(playerCount: 4)),
-                onOpenTraining: () {
-                  final s = ref.read(settingsProvider);
-                  _open(
-                    GameScreen(
-                      playerCount: 2,
-                      rules: GameRulesConfig(
-                        targetScore: s.targetScore,
-                        aiDifficulty: s.aiDifficulty,
-                      ),
-                    ),
-                  );
-                },
-                onOpenLocalPlay: () =>
-                    _open(const LocalMultiplayerScreen(playerCount: 4)),
-                onOpenMoreModes: () => _open(const ModeSelectionScreen()),
-                onOpenSettings: () => _open(const SettingsScreen()),
-                onSelectTab: (idx) => setState(() => _tabIndex = idx),
-              ),
-              CafeShopView(isAr: isAr),
+              // 0 (Leftmost): Profile ("ملفي")
               _ProfileTab(
                 l10n: l10n,
                 isAr: isAr,
@@ -117,6 +109,59 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
                 onOpenGallery: () => _open(const TileGalleryScreen()),
                 onOpenTablePreview: () => _open(const TablePreviewScreen()),
               ),
+              // 1 (2nd from left): Games ("الألعاب")
+              _GamesTab(
+                isAr: isAr,
+                selectedGameId: selectedGame.id,
+                tileSkinId: settings.tileSkinId,
+                onSelectAndOpenHome: (entry) {
+                  ref.read(settingsProvider.notifier).setSelectedGame(entry.id);
+                  setState(() => _tabIndex = 2);
+                },
+              ),
+              // 2 (Center): Home ("الرئيسية")
+              _HomeHallTab(
+                l10n: l10n,
+                isAr: isAr,
+                selectedGame: selectedGame,
+                tileSkinId: settings.tileSkinId,
+                onPlaySelectedGame: () {
+                  final builder = selectedGame.builder;
+                  if (selectedGame.available && builder != null) {
+                    _open(builder(context));
+                  } else {
+                    _showSoonMessage(isAr, selectedGame.title(isAr));
+                  }
+                },
+                onOpenLocalPlay: () {
+                  if (selectedGame.available) {
+                    _open(const LocalMultiplayerScreen(playerCount: 4));
+                  } else {
+                    _showSoonMessage(isAr, selectedGame.title(isAr));
+                  }
+                },
+                onOpenTraining: () {
+                  if (selectedGame.available) {
+                    _open(
+                      GameScreen(
+                        playerCount: 2,
+                        rules: GameRulesConfig(
+                          targetScore: settings.targetScore,
+                          aiDifficulty: settings.aiDifficulty,
+                        ),
+                      ),
+                    );
+                  } else {
+                    _showSoonMessage(isAr, selectedGame.title(isAr));
+                  }
+                },
+                onOpenSettings: () => _open(const SettingsScreen()),
+                onSelectTab: (idx) => setState(() => _tabIndex = idx),
+              ),
+              // 3 (4th from left): Tasks ("المهام")
+              CafeTournamentsView(isAr: isAr),
+              // 4 (Rightmost): Shop ("السوق")
+              CafeShopView(isAr: isAr),
             ],
           ),
         ),
@@ -144,27 +189,33 @@ class _FloatingCapsuleDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    // Physically ordered from LEFT (0) to RIGHT (4):
+    // ملفي -> الألعاب -> الرئيسية -> المهام -> السوق
     final items = <(IconData, IconData, String)>[
+      (
+        Icons.person_outline_rounded,
+        Icons.person_rounded,
+        isAr ? 'ملفي' : 'Profile',
+      ),
       (
         Icons.grid_view_outlined,
         Icons.grid_view_rounded,
         isAr ? 'الألعاب' : 'Games',
       ),
       (
+        Icons.home_outlined,
+        Icons.home_rounded,
+        isAr ? 'الرئيسية' : 'Home',
+      ),
+      (
         Icons.adjust_rounded,
         Icons.adjust_rounded,
         isAr ? 'المهام' : 'Tasks',
       ),
-      (Icons.home_outlined, Icons.home_rounded, isAr ? 'القاعة' : 'Hall'),
       (
         Icons.account_balance_wallet_outlined,
         Icons.account_balance_wallet_rounded,
         isAr ? 'السوق' : 'Shop',
-      ),
-      (
-        Icons.person_outline_rounded,
-        Icons.person_rounded,
-        isAr ? 'ملفي' : 'Profile',
       ),
     ];
 
@@ -184,18 +235,22 @@ class _FloatingCapsuleDock extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          children: [
-            for (var i = 0; i < items.length; i++)
-              Expanded(
-                child: _DockNavItem(
-                  icon: currentIndex == i ? items[i].$2 : items[i].$1,
-                  label: items[i].$3,
-                  selected: currentIndex == i,
-                  onTap: () => onTap(i),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Row(
+            textDirection: TextDirection.ltr,
+            children: [
+              for (var i = 0; i < items.length; i++)
+                Expanded(
+                  child: _DockNavItem(
+                    icon: currentIndex == i ? items[i].$2 : items[i].$1,
+                    label: items[i].$3,
+                    selected: currentIndex == i,
+                    onTap: () => onTap(i),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -254,120 +309,139 @@ class _DockNavItem extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Center Tab: Main Hall ("القاعة") — 1:1 Portrait Reference Layout
+// Center Tab: Home ("الرئيسية") — Selected Game Showcase, Play CTA, 2 Offline
+// Modes (Local & Practice, 0 XP), and Per-Game Leaderboard
 // ---------------------------------------------------------------------------
 
 class _HomeHallTab extends ConsumerWidget {
   const _HomeHallTab({
     required this.l10n,
     required this.isAr,
-    required this.onQuickPlay,
-    required this.onOpen2v2Teams,
-    required this.onOpenTraining,
+    required this.selectedGame,
+    required this.tileSkinId,
+    required this.onPlaySelectedGame,
     required this.onOpenLocalPlay,
-    required this.onOpenMoreModes,
+    required this.onOpenTraining,
     required this.onOpenSettings,
     required this.onSelectTab,
   });
 
   final AppLocalizations l10n;
   final bool isAr;
-  final VoidCallback onQuickPlay;
-  final VoidCallback onOpen2v2Teams;
-  final VoidCallback onOpenTraining;
+  final GameEntry selectedGame;
+  final String tileSkinId;
+  final VoidCallback onPlaySelectedGame;
   final VoidCallback onOpenLocalPlay;
-  final VoidCallback onOpenMoreModes;
+  final VoidCallback onOpenTraining;
   final VoidCallback onOpenSettings;
   final ValueChanged<int> onSelectTab;
-
-  int _computeRank(int myRating) {
-    const rivals = [1450, 1280, 1120];
-    var rank = 1;
-    for (final r in rivals) {
-      if (r > myRating) rank++;
-    }
-    return rank;
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(gameDataCenterProvider);
     final persona = AiPersona.all[account.avatarIndex % AiPersona.all.length];
-    final myRank = _computeRank(account.rating);
+    final skin = TileSkin.byId(tileSkinId);
+    final parentDir = Directionality.of(context);
+
+    final leaders = buildLeaderboardEntries(
+      account: account,
+      gameId: selectedGame.id,
+      scope: LeaderboardScope.rating,
+    );
+    final myIndex = leaders.indexWhere((e) => e.isMe);
+    final myRank = myIndex >= 0 ? myIndex + 1 : 1;
+    final myPts = myIndex >= 0 ? leaders[myIndex].points : account.rating;
     final rankTitle = CafeProgression.cafeTitleForRank(
       leaderboardRank: myRank,
-      rating: account.rating,
+      rating: myPts,
       isAr: isAr,
     );
-
-    final readyEvents = [
-      for (final e in CafeLiveOpsDefaults.events)
-        if (e.isActiveOn() &&
-            !e.isClaimedBy(account) &&
-            e.isCompletedBy(account))
-          e,
-    ].length;
-
-    final leaders = <({String nameAr, String nameEn, int pts, bool isMe})>[
-      (nameAr: 'أبو علي البغدادي', nameEn: 'Abu Ali', pts: 1450, isMe: false),
-      (nameAr: 'حيدر المنصور', nameEn: 'Haider', pts: 1280, isMe: false),
-      (nameAr: 'كرار البصري', nameEn: 'Karrar', pts: 1120, isMe: false),
-      (
-        nameAr: account.displayName,
-        nameEn: account.displayName,
-        pts: account.rating,
-        isMe: true,
-      ),
-    ]..sort((a, b) => b.pts.compareTo(a.pts));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 108),
       children: [
-        // 1. Top Utility Row: Player Identity Pill + Currency & Action Squircles
-        Row(
-          children: [
-            Expanded(
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: MaqhaPlayerIdentityPill(
-                  displayName: account.displayName,
-                  rankTitle: rankTitle,
-                  avatarChild: AiPersonaAvatar(persona: persona, size: 34),
-                  onTap: () => onSelectTab(4),
+        // 1. Top Utility Row (Physically Left -> Right):
+        //    Far Left = Settings, Next = Currency, Far Right = Compact Player Pill
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Row(
+            textDirection: TextDirection.ltr,
+            children: [
+              Directionality(
+                textDirection: parentDir,
+                child: MaqhaTopIconButton(
+                  icon: Icons.settings_outlined,
+                  tooltip: l10n.settings,
+                  onTap: onOpenSettings,
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-            MaqhaTopIconButton(
-              icon: Icons.notifications_none_rounded,
-              badgeCount: readyEvents,
-              tooltip: isAr ? 'المهام والإشعارات' : 'Events',
-              onTap: () => onSelectTab(1),
-            ),
-            const SizedBox(width: 6),
-            MaqhaTopIconButton(
-              icon: Icons.settings_outlined,
-              tooltip: l10n.settings,
-              onTap: onOpenSettings,
-            ),
-            const SizedBox(width: 6),
-            CafeDinarPill(amount: account.cafeDinars, isAr: isAr, compact: true),
-          ],
+              const SizedBox(width: 6),
+              Directionality(
+                textDirection: parentDir,
+                child: CafeDinarPill(
+                  amount: account.cafeDinars,
+                  isAr: isAr,
+                  compact: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Directionality(
+                    textDirection: parentDir,
+                    child: MaqhaPlayerIdentityPill(
+                      displayName: account.displayName,
+                      rankTitle: rankTitle,
+                      avatarChild: AiPersonaAvatar(persona: persona, size: 24),
+                      onTap: () => onSelectTab(0),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
 
-        const SizedBox(height: 26),
+        const SizedBox(height: 18),
 
-        // 2. Clean Brand Header + Gold Underline Bar
+        // Subtle Al-Maqha platform tag
         Center(
           child: Text(
             l10n.appTitle,
+            style: const TextStyle(
+              color: MaqhaColors.textSecondary,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // 2. Selected Game Illustration / Symbol + Game Title
+        Center(
+          child: GestureDetector(
+            onTap: () => onSelectTab(1),
+            child: _GameHeroEmblem(
+              gameId: selectedGame.id,
+              skin: skin,
+              size: 104,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: Text(
+            selectedGame.title(isAr),
+            textAlign: TextAlign.center,
             style: MaqhaTextStyles.displayGoldTitle,
           ),
         ),
         const SizedBox(height: 6),
         Center(
           child: Container(
-            width: 58,
+            width: 54,
             height: 4,
             decoration: BoxDecoration(
               color: MaqhaColors.goldPrimary,
@@ -376,167 +450,59 @@ class _HomeHallTab extends ConsumerWidget {
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
 
-        // 3. Hero Match Prompt + Glowing Stadium Gold CTA Button
-        Center(
-          child: Text(
-            isAr ? 'ابحث عن مباراة' : 'Find a Match',
-            style: MaqhaTextStyles.heroPrompt,
-          ),
-        ),
-        const SizedBox(height: 14),
+        // 3. Main Gold Pill CTA Button ("العب")
         SizedBox(
           width: double.infinity,
           child: MaqhaGoldPillButton(
-            label: l10n.play,
+            label: selectedGame.available
+                ? l10n.play
+                : (isAr ? 'قريباً' : 'Coming Soon'),
+            showPlayArrow: selectedGame.available,
             height: 56,
-            onPressed: onQuickPlay,
+            onPressed: onPlaySelectedGame,
           ),
         ),
 
-        const SizedBox(height: 22),
-        Center(
-          child: Text(
-            isAr ? 'أو اختر طريقة أخرى للعب' : 'Or choose another mode',
-            style: const TextStyle(
-              color: MaqhaColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
 
-        // 4. 2×2 Grid of Matte Charcoal Mode Cards (matching the 4 cards in mockup)
-        Row(
-          children: [
-            Expanded(
-              child: MaqhaModeCard(
-                icon: Icons.groups_rounded,
-                title: isAr ? 'فرق 2×2' : 'Teams 2×2',
-                subtitle: isAr ? 'كوّن طاولة' : 'Create table',
-                onTap: onOpen2v2Teams,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: MaqhaModeCard(
-                icon: Icons.school_outlined,
-                title: isAr ? 'تدريب' : 'Practice',
-                subtitle: isAr ? 'بدون إنترنت' : 'Offline AI',
-                onTap: onOpenTraining,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
+        // 4. ONLY Local Play & Practice with Bots (0 XP) directly below Play
         Row(
           children: [
             Expanded(
               child: MaqhaModeCard(
                 icon: Icons.wifi_tethering_rounded,
                 title: isAr ? 'لعب محلي' : 'Local Play',
-                subtitle: isAr ? 'بدون إنترنت' : 'Offline P2P',
+                subtitle: isAr ? 'داخلي • بدون خبرة' : 'Local • 0 XP',
                 onTap: onOpenLocalPlay,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: MaqhaModeCard(
-                icon: Icons.more_horiz_rounded,
-                title: isAr ? 'المزيد' : 'More',
-                subtitle: isAr ? 'بوت • كود' : 'Bot • Code',
-                onTap: onOpenMoreModes,
+                icon: Icons.smart_toy_outlined,
+                title: isAr ? 'تدريب' : 'Practice',
+                subtitle: isAr ? 'مع البوتات • بدون خبرة' : 'Bots • 0 XP',
+                onTap: onOpenTraining,
               ),
             ),
           ],
         ),
 
-        const SizedBox(height: 22),
+        const SizedBox(height: 18),
 
-        // 5. Minimal Matte Charcoal Leaderboard Section ("المتصدرون")
-        Row(
-          children: [
-            const Icon(
-              Icons.emoji_events_outlined,
-              color: MaqhaColors.goldPrimary,
-              size: 19,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isAr ? 'المتصدرون' : 'Leaderboard',
-                style: const TextStyle(
-                  color: MaqhaColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            Text(
-              '${account.rating}',
-              style: const TextStyle(
-                color: MaqhaColors.goldPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _PanelCard(
-          child: Column(
-            children: [
-              for (var i = 0; i < leaders.length; i++) ...[
-                if (i > 0)
-                  const Divider(height: 16, color: MaqhaColors.borderSubtle),
-                Row(
-                  children: [
-                    _RankBadge(rank: i + 1),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isAr ? leaders[i].nameAr : leaders[i].nameEn,
-                            style: TextStyle(
-                              color: leaders[i].isMe
-                                  ? MaqhaColors.goldBright
-                                  : MaqhaColors.textPrimary,
-                              fontSize: 13.5,
-                              fontWeight: leaders[i].isMe
-                                  ? FontWeight.w800
-                                  : FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            CafeProgression.cafeTitleForRank(
-                              leaderboardRank: i + 1,
-                              rating: leaders[i].pts,
-                              isAr: isAr,
-                            ),
-                            style: const TextStyle(
-                              color: MaqhaColors.textSecondary,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      '${leaders[i].pts}',
-                      style: const TextStyle(
-                        color: MaqhaColors.goldPrimary,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
+        // 5. Shaded/Subtle Leaderboard Button -> Opens Podium Leaderboard Popup
+        MaqhaLeaderboardShadedButton(
+          gameTitle: selectedGame.title(isAr),
+          myRank: myRank,
+          myPoints: myPts,
+          isAr: isAr,
+          onTap: () => MaqhaLeaderboardSheet.show(
+            context,
+            account: account,
+            selectedGame: selectedGame,
+            isAr: isAr,
           ),
         ),
       ],
@@ -544,56 +510,218 @@ class _HomeHallTab extends ConsumerWidget {
   }
 }
 
-class _RankBadge extends StatelessWidget {
-  const _RankBadge({required this.rank});
+/// High-precision custom-painted emblem & illustration for the selected game.
+class _GameHeroEmblem extends StatelessWidget {
+  const _GameHeroEmblem({
+    required this.gameId,
+    required this.skin,
+    this.size = 104,
+  });
 
-  final int rank;
+  final String gameId;
+  final TileSkin skin;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (rank) {
-      1 => MaqhaColors.goldBright,
-      2 => const Color(0xFFC7D2D6),
-      _ => const Color(0xFFC59368),
-    };
     return Container(
-      width: 26,
-      height: 26,
-      alignment: Alignment.center,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withValues(alpha: 0.14),
-        border: Border.all(color: color.withValues(alpha: 0.7)),
-      ),
-      child: Text(
-        '$rank',
-        style: TextStyle(
-          color: color,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w800,
+        color: MaqhaColors.cardCharcoal,
+        border: Border.all(
+          color: MaqhaColors.goldPrimary.withValues(alpha: 0.75),
+          width: 1.6,
         ),
+        boxShadow: MaqhaShadows.goldCtaGlow,
       ),
+      child: Center(child: _buildInnerArtwork()),
     );
+  }
+
+  Widget _buildInnerArtwork() {
+    switch (gameId) {
+      case 'backgammon':
+        return CustomPaint(
+          size: Size(size * 0.58, size * 0.58),
+          painter: const _BackgammonEmblemPainter(),
+        );
+      case 'cards':
+        return CustomPaint(
+          size: Size(size * 0.58, size * 0.58),
+          painter: const _PlayingCardsEmblemPainter(),
+        );
+      default:
+        final tileW = (size * 0.25).clamp(14.0, 30.0);
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Transform.translate(
+              offset: Offset(-tileW * 0.58, tileW * 0.14),
+              child: Transform.rotate(
+                angle: -0.22,
+                child: DominoTile(
+                  top: 6,
+                  bottom: 5,
+                  width: tileW * 0.86,
+                  skin: skin,
+                ),
+              ),
+            ),
+            Transform.translate(
+              offset: Offset(tileW * 0.42, -tileW * 0.06),
+              child: Transform.rotate(
+                angle: 0.14,
+                child: DominoTile(top: 6, bottom: 6, width: tileW, skin: skin),
+              ),
+            ),
+          ],
+        );
+    }
   }
 }
 
+class _BackgammonEmblemPainter extends CustomPainter {
+  const _BackgammonEmblemPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, h * 0.08, w, h * 0.84),
+      Radius.circular(w * 0.14),
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()..color = const Color(0xFF143A38),
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = MaqhaColors.goldPrimary
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8,
+    );
+
+    // 4 triangular points along top & bottom
+    final goldSpike = Paint()..color = MaqhaColors.goldPrimary.withValues(alpha: 0.85);
+    final mutedSpike = Paint()..color = MaqhaColors.textPrimary.withValues(alpha: 0.35);
+    final step = (w * 0.8) / 4;
+    for (var i = 0; i < 4; i++) {
+      final x0 = w * 0.1 + i * step;
+      final topTri = Path()
+        ..moveTo(x0, h * 0.10)
+        ..lineTo(x0 + step * 0.85, h * 0.10)
+        ..lineTo(x0 + step * 0.425, h * 0.44)
+        ..close();
+      canvas.drawPath(topTri, i.isEven ? goldSpike : mutedSpike);
+
+      final botTri = Path()
+        ..moveTo(x0, h * 0.90)
+        ..lineTo(x0 + step * 0.85, h * 0.90)
+        ..lineTo(x0 + step * 0.425, h * 0.56)
+        ..close();
+      canvas.drawPath(botTri, i.isOdd ? goldSpike : mutedSpike);
+    }
+
+    // Checkers + die
+    canvas.drawCircle(
+      Offset(w * 0.28, h * 0.76),
+      w * 0.09,
+      Paint()..color = MaqhaColors.goldBright,
+    );
+    canvas.drawCircle(
+      Offset(w * 0.72, h * 0.24),
+      w * 0.09,
+      Paint()..color = MaqhaColors.textPrimary,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _BackgammonEmblemPainter oldDelegate) => false;
+}
+
+class _PlayingCardsEmblemPainter extends CustomPainter {
+  const _PlayingCardsEmblemPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    void drawCard(double angle, Offset shift, Color fill, Color diamondColor) {
+      canvas.save();
+      canvas.translate(w / 2 + shift.dx, h / 2 + shift.dy);
+      canvas.rotate(angle);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset.zero, width: w * 0.52, height: h * 0.74),
+        Radius.circular(w * 0.09),
+      );
+      canvas.drawRRect(rect, Paint()..color = fill);
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = MaqhaColors.goldPrimary
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6,
+      );
+      final d = w * 0.12;
+      final diamond = Path()
+        ..moveTo(0, -d)
+        ..lineTo(d * 0.8, 0)
+        ..lineTo(0, d)
+        ..lineTo(-d * 0.8, 0)
+        ..close();
+      canvas.drawPath(diamond, Paint()..color = diamondColor);
+      canvas.restore();
+    }
+
+    drawCard(
+      -0.24,
+      Offset(-w * 0.10, h * 0.02),
+      const Color(0xFF1F2B2E),
+      MaqhaColors.textSecondary,
+    );
+    drawCard(
+      0.16,
+      Offset(w * 0.10, -h * 0.01),
+      const Color(0xFF143A38),
+      MaqhaColors.goldBright,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PlayingCardsEmblemPainter oldDelegate) => false;
+}
+
 // ---------------------------------------------------------------------------
-// Tab 0: Games Catalog
+// Tab 1: Games Catalog ("الألعاب") — Select & Switch Active Game on Home
 // ---------------------------------------------------------------------------
 
 class _GamesTab extends StatelessWidget {
-  const _GamesTab({required this.isAr, required this.onOpenGame});
+  const _GamesTab({
+    required this.isAr,
+    required this.selectedGameId,
+    required this.tileSkinId,
+    required this.onSelectAndOpenHome,
+  });
 
   final bool isAr;
-  final ValueChanged<GameEntry> onOpenGame;
+  final String selectedGameId;
+  final String tileSkinId;
+  final ValueChanged<GameEntry> onSelectAndOpenHome;
 
   @override
   Widget build(BuildContext context) {
+    final skin = TileSkin.byId(tileSkinId);
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 108),
       children: [
         Text(
-          isAr ? 'ألعاب المقهى' : 'Games',
+          isAr ? 'الألعاب' : 'Games',
           style: const TextStyle(
             color: MaqhaColors.goldBright,
             fontSize: 21,
@@ -603,69 +731,111 @@ class _GamesTab extends StatelessWidget {
         const SizedBox(height: 14),
         for (final entry in GameCatalog.entries)
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: GestureDetector(
-              onTap: entry.available ? () => onOpenGame(entry) : null,
-              child: Opacity(
-                opacity: entry.available ? 1 : 0.55,
-                child: _PanelCard(
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: MaqhaColors.goldPrimary.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          entry.icon,
-                          color: MaqhaColors.goldPrimary,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              entry.title(isAr),
-                              style: const TextStyle(
-                                color: MaqhaColors.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              entry.available
-                                  ? (isAr ? 'متاح الآن' : 'Available')
-                                  : (isAr ? 'قريباً' : 'Coming soon'),
-                              style: const TextStyle(
-                                color: MaqhaColors.textSecondary,
-                                fontSize: 11.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        entry.available
-                            ? Icons.arrow_forward_ios_rounded
-                            : Icons.lock_outline_rounded,
-                        color: entry.available
-                            ? MaqhaColors.goldPrimary
-                            : MaqhaColors.textSecondary,
-                        size: 18,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _GameCatalogCard(
+              entry: entry,
+              isAr: isAr,
+              isSelected: entry.id == selectedGameId,
+              skin: skin,
+              onActivate: () => onSelectAndOpenHome(entry),
             ),
           ),
       ],
+    );
+  }
+}
+
+class _GameCatalogCard extends StatelessWidget {
+  const _GameCatalogCard({
+    required this.entry,
+    required this.isAr,
+    required this.isSelected,
+    required this.skin,
+    required this.onActivate,
+  });
+
+  final GameEntry entry;
+  final bool isAr;
+  final bool isSelected;
+  final TileSkin skin;
+  final VoidCallback onActivate;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onActivate,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? MaqhaColors.cardCharcoalElevated
+              : MaqhaColors.cardCharcoal,
+          borderRadius: MaqhaRadii.panelCard,
+          border: Border.all(
+            color: isSelected
+                ? MaqhaColors.goldPrimary
+                : MaqhaColors.borderSubtle,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+          boxShadow: MaqhaShadows.softCard,
+        ),
+        child: Row(
+          children: [
+            _GameHeroEmblem(gameId: entry.id, skin: skin, size: 56),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.title(isAr),
+                    style: const TextStyle(
+                      color: MaqhaColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    entry.subtitle(isAr),
+                    style: const TextStyle(
+                      color: MaqhaColors.textSecondary,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: MaqhaGradients.primaryGoldCta,
+                borderRadius: MaqhaRadii.pill,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isAr ? 'تشغيل' : 'Open',
+                    style: const TextStyle(
+                      color: MaqhaColors.textOnGold,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.play_arrow_rounded,
+                    color: MaqhaColors.textOnGold,
+                    size: 17,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

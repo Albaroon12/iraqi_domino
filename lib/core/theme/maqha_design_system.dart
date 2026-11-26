@@ -681,67 +681,74 @@ class MaqhaPlayerIdentityPill extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsetsDirectional.fromSTEB(6, 5, 14, 5),
-        decoration: BoxDecoration(
-          color: MaqhaColors.profilePillFill,
-          borderRadius: MaqhaRadii.pill,
-          border: Border.all(color: MaqhaColors.borderSubtle),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: MaqhaColors.avatarJade,
-                border: Border.all(color: MaqhaColors.goldPrimary, width: 1.6),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 156),
+        child: Container(
+          padding: const EdgeInsetsDirectional.fromSTEB(4, 3, 10, 3),
+          decoration: BoxDecoration(
+            color: MaqhaColors.profilePillFill,
+            borderRadius: MaqhaRadii.pill,
+            border: Border.all(color: MaqhaColors.borderSubtle),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: MaqhaColors.avatarJade,
+                  border: Border.all(
+                    color: MaqhaColors.goldPrimary,
+                    width: 1.3,
+                  ),
+                ),
+                child: avatarChild != null
+                    ? ClipOval(child: avatarChild)
+                    : Text(
+                        initial,
+                        style: const TextStyle(
+                          color: MaqhaColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
               ),
-              child: avatarChild != null
-                  ? ClipOval(child: avatarChild)
-                  : Text(
-                      initial,
+              const SizedBox(width: 6),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: MaqhaColors.textPrimary,
-                        fontSize: 15,
+                        fontSize: 11,
                         fontWeight: FontWeight.w800,
+                        height: 1.12,
                       ),
                     ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: MaqhaColors.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
+                    Text(
+                      rankTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: MaqhaColors.textSecondary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                      ),
                     ),
-                  ),
-                  Text(
-                    rankTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: MaqhaColors.textSecondary,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

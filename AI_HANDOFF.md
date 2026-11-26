@@ -6,7 +6,7 @@
 > The owner works with several agents on different days. No agent remembers
 > the previous one. This file is the memory.
 
-Last updated: 2026-11-26 by Antigravity. Completed the full-app Portrait visual overhaul to the Emerald-Teal (`#0B2F2F..#1F4643`), Matte Charcoal-Slate (`#182022`), & Warm Amber-Gold (`#F7CB62 -> #D6AD41`) design system across every screen, widget, dialog, and catalog — removing all text emojis in favor of crisp vector icons and concise UI copy.
+Last updated: 2026-11-26 by Antigravity. Reordered the Home top bar left-to-right (`الإعدادات` -> `الفلوس` -> compact `MaqhaPlayerIdentityPill` on the right, notifications removed), shrank the player name/title pill, and replaced the inline Home leaderboard with a soft shaded trigger button (`MaqhaLeaderboardShadedButton`) that opens a 90%-height Podium Leaderboard modal sheet (`MaqhaLeaderboardSheet`) matching the owner's Emerald Podium mockup.
 
 ---
 
@@ -263,6 +263,44 @@ Format: `- [OPEN|DONE] from → to (date): message`
 - Status/phase impact: <none | what moved>
 - Left for next agent: <what is unfinished, risks, traps>
 ```
+
+### 2026-11-26 20:00 — Antigravity — Top Bar Reorder (Settings -> Currency, No Notifications), Compact Identity Pill & Podium Leaderboard Popup Sheet
+- Task asked by: owner (place Settings first on the far left of the top bar followed by Currency, remove the Notifications icon, shrink the player name/title pill, and turn the Home Leaderboard into a soft shaded button that opens a large popup sheet matching the uploaded Emerald Podium reference image).
+- Changed:
+  - `lib/ui/widgets/maqha_leaderboard_sheet.dart` (new): built `MaqhaLeaderboardShadedButton` (calm translucent dark-emerald trigger button) and `MaqhaLeaderboardSheet` (90%-height modal sheet with `المتصدرين` header, 4 filter pills `التصنيف / كل الوقت / الشهر / الأسبوع`, `3 - 1 - 2` elevated podium with overlapping circular avatars, country codes & tier badges, and ranked rows `4+` below).
+  - `lib/core/theme/maqha_design_system.dart`: shrank `MaqhaPlayerIdentityPill` (`26px` avatar, `11px` name, `9px` rank title, `maxWidth: 156`, tighter padding).
+  - `lib/ui/screens/app_shell_screen.dart`: updated `_HomeHallTab` top bar physically left-to-right (`Settings` -> `CafeDinarPill` -> compact `MaqhaPlayerIdentityPill` on the right, notifications icon removed) and replaced the inline leaderboard panel with `MaqhaLeaderboardShadedButton`.
+  - `test/ui/game_screen_test.dart`: updated test to open `MaqhaLeaderboardSheet` via `المتصدرين — طاولة الزهر` and verify the 4 scope filter pills.
+- Added/removed packages: none.
+- Verified: NOT RUN (by standing owner instruction: owner runs `flutter analyze` and `flutter test` locally).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Home top bar and Leaderboard popup sheet match owner's exact visual specification.
+- Left for next agent: await owner's verification and next instructions.
+
+### 2026-11-26 19:45 — Antigravity — Left-to-Right Dock Order, Persisted Active Game on Home (`الرئيسية`), Per-Game Leaderboard & 0-XP Local/Practice Cards
+- Task asked by: owner (1: reorder bottom navigation from left to right as `ملفي -> الألعاب -> الرئيسية -> المهام -> السوق`; 2: in `الألعاب`, add a `تشغيل` button that switches to `الرئيسية` displaying the selected game's emblem/art, Play button, and per-game Leaderboard, persisting the last selected game across app restarts; 3: show ONLY `لعب محلي` and `تدريب` beneath the Play button, both awarding `0 XP`).
+- Changed:
+  - `lib/core/games/game_catalog.dart`, `lib/state/settings_provider.dart`: added `GameCatalog.byId` and persisted `selectedGameId` (`settings.selected_game` in `SharedPreferences`).
+  - `lib/ui/screens/app_shell_screen.dart`: enforced physical left-to-right bottom dock order (`ملفي`, `الألعاب`, `الرئيسية`, `المهام`, `السوق`), added `_GameHeroEmblem` custom painters (Domino, Backgammon, Playing Cards) + `تشغيل` switcher in `_GamesTab`, updated `_HomeHallTab` (`الرئيسية`) to render the persisted game's artwork, `العب` button, ONLY `لعب محلي` (`داخلي • بدون خبرة`) & `تدريب` (`مع البوتات • بدون خبرة`), and per-game Leaderboard (`المتصدرون — <اللعبة>`).
+  - `lib/state/multiplayer_session_controller.dart`: set `isOnlineMatch` to `true` strictly for `onlineRoom` / `onlineRandom` and `false` for Local Wi-Fi / Offline Wi-Fi / Bluetooth so internal Local Play awards `0` Match XP just like Practice vs Bots.
+  - `test/ui/game_screen_test.dart`: added widget test verifying physical left-to-right dock coordinates, 2-card `لعب محلي` + `تدريب` layout, game switching from `الألعاب` to `الرئيسية`, and persistence across app restarts.
+- Added/removed packages: none.
+- Verified: NOT RUN (by standing owner instruction: owner runs `flutter analyze` and `flutter test` locally).
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Multi-game Home & Dock UX updated to owner's exact specification.
+- Left for next agent: await owner's `flutter analyze` & `flutter test` verification and next instructions.
+
+### 2026-11-26 19:30 — Antigravity — Removed Flutter Splash Logo (Android 12+ & Web) and Replaced Default Flutter Launcher Icons
+- Task asked by: owner (explain whether the Flutter logo shown when entering the app is dev-only or in release builds too, and remove it completely).
+- Changed:
+  - `android/app/src/main/res/drawable/transparent_splash_icon.xml` (new), `android/app/src/main/res/values-v31/styles.xml` (new), `android/app/src/main/res/values-night-v31/styles.xml` (new): configured Android 12+ (`API 31+`) `windowSplashScreenBackground` (`#0B2F2F`) and transparent `windowSplashScreenAnimatedIcon` so Android never flashes the launcher icon on cold start.
+  - `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` (new), `android/app/src/main/res/drawable/ic_launcher_background.xml` (new), `android/app/src/main/res/drawable/ic_launcher_foreground.xml` (new), `android/app/src/main/res/mipmap-*/ic_launcher.png`, `ios/Runner/Assets.xcassets/AppIcon.appiconset/*.png`, `web/favicon.png`, `web/icons/*.png`: replaced all default Flutter `F` launcher icons with the custom **المقهى** Emerald-Teal & Gold `[6|6]` Domino emblem.
+  - `web/index.html`: set `#0B2F2F` background and direct `_flutter.loader.load()` to eliminate Flutter's default web loading logo spinner.
+- Added/removed packages: none.
+- Verified: icon generation script verified on all Android, iOS, and Web icon targets.
+- Docs updated: `AI_HANDOFF.md`.
+- Status/phase impact: Zero default Flutter logos remain on startup or launcher icons across Debug and Release builds.
+- Left for next agent: await owner's next UI/feature request.
 
 ### 2026-11-26 18:06 — Antigravity — Full-App Portrait Redesign to Emerald-Teal, Matte Charcoal-Slate, & Royal Amber-Gold (Zero Text Emojis & Concise Copy)
 - Task asked by: owner (keep Portrait orientation, apply the reference Emerald-Teal + Matte Charcoal + Gold Pill design across the entire app, use calm minimal buttons/high-precision vector icons separated from text, keep copy short without verbose explanations, and remove all text emojis).

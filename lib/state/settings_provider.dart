@@ -23,9 +23,15 @@ class SettingsState {
     this.soundEnabled = true,
     this.ambientEnabled = true,
     this.aiDifficulty = AiDifficulty.medium,
+    this.selectedGameId = 'iraqi_domino',
   });
 
   static const List<String> supportedLanguages = ['ar', 'en'];
+  static const List<String> knownGameIds = [
+    'iraqi_domino',
+    'backgammon',
+    'cards',
+  ];
 
   /// Target score choices offered in the settings screen.
   static const List<int> targetScoreOptions = [151, 200, 250];
@@ -36,6 +42,7 @@ class SettingsState {
   final bool soundEnabled;
   final bool ambientEnabled;
   final AiDifficulty aiDifficulty;
+  final String selectedGameId;
 
   Locale get locale => Locale(languageCode);
 
@@ -46,6 +53,7 @@ class SettingsState {
     bool? soundEnabled,
     bool? ambientEnabled,
     AiDifficulty? aiDifficulty,
+    String? selectedGameId,
   }) {
     return SettingsState(
       languageCode: languageCode ?? this.languageCode,
@@ -54,6 +62,7 @@ class SettingsState {
       soundEnabled: soundEnabled ?? this.soundEnabled,
       ambientEnabled: ambientEnabled ?? this.ambientEnabled,
       aiDifficulty: aiDifficulty ?? this.aiDifficulty,
+      selectedGameId: selectedGameId ?? this.selectedGameId,
     );
   }
 }
@@ -66,6 +75,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
   static const _kSound = 'settings.sound';
   static const _kAmbient = 'settings.ambient_sound';
   static const _kAiDifficulty = 'settings.ai_difficulty';
+  static const _kSelectedGame = 'settings.selected_game';
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
@@ -78,6 +88,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
     final language = prefs.getString(_kLanguage);
     final score = prefs.getInt(_kTargetScore);
+    final savedGame = prefs.getString(_kSelectedGame);
 
     return SettingsState(
       languageCode: SettingsState.supportedLanguages.contains(language)
@@ -90,6 +101,9 @@ class SettingsNotifier extends Notifier<SettingsState> {
       soundEnabled: prefs.getBool(_kSound) ?? defaults.soundEnabled,
       ambientEnabled: prefs.getBool(_kAmbient) ?? defaults.ambientEnabled,
       aiDifficulty: AiDifficulty.byId(prefs.getString(_kAiDifficulty)),
+      selectedGameId: SettingsState.knownGameIds.contains(savedGame)
+          ? savedGame!
+          : defaults.selectedGameId,
     );
   }
 
@@ -121,6 +135,12 @@ class SettingsNotifier extends Notifier<SettingsState> {
   void setAiDifficulty(AiDifficulty difficulty) {
     state = state.copyWith(aiDifficulty: difficulty);
     _prefs.setString(_kAiDifficulty, difficulty.id);
+  }
+
+  void setSelectedGame(String gameId) {
+    if (!SettingsState.knownGameIds.contains(gameId)) return;
+    state = state.copyWith(selectedGameId: gameId);
+    _prefs.setString(_kSelectedGame, gameId);
   }
 }
 
