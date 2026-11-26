@@ -214,11 +214,9 @@ class _OnlineFriendsRoomScreenState
                             vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xCC180E09),
+                            color: AppColors.surfaceCharcoal,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: AppColors.gold.withValues(alpha: 0.35),
-                            ),
+                            border: Border.all(color: AppColors.borderSubtle),
                           ),
                           child: Row(
                             children: [
@@ -309,33 +307,19 @@ class _OnlineFriendsRoomScreenState
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: const Color(0xDD1D110A),
+                            color: AppColors.surfaceCharcoal,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: AppColors.gold.withValues(alpha: 0.45),
-                            ),
+                            border: Border.all(color: AppColors.borderSubtle),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isAr
-                                    ? '1. إنشاء غرفة أونلاين جديدة'
-                                    : '1. Create Online Room',
+                                isAr ? 'إنشاء غرفة أونلاين' : 'Create Room',
                                 style: const TextStyle(
                                   color: AppColors.gold,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                isAr
-                                    ? 'يُنشئ السيرفر رقم غرفة تلقائياً من 4 أرقام لتشاركه مع أصدقائك وتختاروا المقاعد والشركاء'
-                                    : 'Server generates a 4-digit room code for your friends',
-                                style: TextStyle(
-                                  color: AppColors.ivory.withValues(alpha: 0.7),
-                                  fontSize: 11.5,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -381,19 +365,15 @@ class _OnlineFriendsRoomScreenState
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: const Color(0xDD1D110A),
+                            color: AppColors.surfaceCharcoal,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: AppColors.gold.withValues(alpha: 0.4),
-                            ),
+                            border: Border.all(color: AppColors.borderSubtle),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                isAr
-                                    ? '2. الانضمام لغرفة صديق أونلاين'
-                                    : '2. Join Friend\'s Online Room',
+                                isAr ? 'الانضمام لغرفة' : 'Join Room',
                                 style: const TextStyle(
                                   color: AppColors.gold,
                                   fontSize: 14,

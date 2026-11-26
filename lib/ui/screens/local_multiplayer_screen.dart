@@ -271,33 +271,19 @@ class _LocalMultiplayerScreenState
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xDD1D110A),
+                          color: AppColors.surfaceCharcoal,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: AppColors.gold.withValues(alpha: 0.45),
-                          ),
+                          border: Border.all(color: AppColors.borderSubtle),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isAr
-                                  ? '2. إنشاء غرفة جديدة (كود غرفة تلقائي)'
-                                  : '2. Create Room (Auto Room Number)',
+                              isAr ? 'إنشاء غرفة جديدة' : 'Create Room',
                               style: const TextStyle(
                                 color: AppColors.gold,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              isAr
-                                  ? 'سيُنشأ لك رقم غرفة تلقائي من 4 أرقام ليُدخله صديقك أو يختار غرفتك من البحث'
-                                  : 'Generates an automatic 4-digit room number for friends',
-                              style: TextStyle(
-                                color: AppColors.ivory.withValues(alpha: 0.7),
-                                fontSize: 11.5,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -343,19 +329,15 @@ class _LocalMultiplayerScreenState
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xDD1D110A),
+                          color: AppColors.surfaceCharcoal,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: AppColors.gold.withValues(alpha: 0.4),
-                          ),
+                          border: Border.all(color: AppColors.borderSubtle),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              isAr
-                                  ? '3. الانضمام لغرفة صديق'
-                                  : '3. Join a Friend\'s Room',
+                              isAr ? 'الانضمام لغرفة' : 'Join Room',
                               style: const TextStyle(
                                 color: AppColors.gold,
                                 fontSize: 14,
@@ -630,9 +612,9 @@ class _IdentityBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xCC180E09),
+        color: AppColors.surfaceCharcoal,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Row(
         children: [
@@ -709,14 +691,12 @@ class _ChannelSelectorTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.gold.withValues(alpha: 0.18)
-              : const Color(0xBB190F09),
+              ? AppColors.gold.withValues(alpha: 0.14)
+              : AppColors.surfaceCharcoal,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected
-                ? AppColors.gold
-                : AppColors.gold.withValues(alpha: 0.28),
-            width: selected ? 1.8 : 1,
+            color: selected ? AppColors.gold : AppColors.borderSubtle,
+            width: selected ? 1.5 : 1,
           ),
         ),
         child: Row(

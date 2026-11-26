@@ -1,9 +1,13 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../../core/constants/app_colors.dart';
+import '../../core/theme/maqha_design_system.dart';
 
-/// The game's standard button: dark wood or gold, with a gold border.
-/// [onPressed] null means disabled (shown faded).
+/// Unified button matching the Emerald & Gold reference design:
+/// - `primary: true` -> Warm amber-gold gradient (`#F7CB62 -> #D6AD41`), stadium
+///   pill shape (`999` radius when single-line, `16px` when carrying a subtitle),
+///   dark `#231304` text, and soft golden glow.
+/// - `primary: false` -> Matte charcoal-slate (`#182022`) surface with a crisp
+///   `1px` subtle border, gold icon, off-white title, and muted sage subtitle.
 class GameButton extends StatelessWidget {
   const GameButton({
     super.key,
@@ -23,47 +27,47 @@ class GameButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    final foreground = primary ? AppColors.walnut : AppColors.ivory;
-    final gradient = primary
-        ? const [Color(0xFFE2BC62), Color(0xFFA57F2B)]
-        : const [Color(0xFF4A3020), Color(0xFF2B1B12)];
-    final radius = BorderRadius.circular(14);
+    final hasSubtitle = subtitle != null && subtitle!.trim().isNotEmpty;
+    final radius = primary && !hasSubtitle
+        ? MaqhaRadii.pill
+        : MaqhaRadii.modeCard;
+    final fgTitle = primary ? MaqhaColors.textOnGold : MaqhaColors.textPrimary;
+    final fgSub = primary
+        ? MaqhaColors.textOnGold.withValues(alpha: 0.72)
+        : MaqhaColors.textSecondary;
+    final iconColor = primary ? MaqhaColors.textOnGold : MaqhaColors.goldPrimary;
 
     return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: Material(
-        color: Colors.transparent,
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: gradient,
-            ),
-            borderRadius: radius,
-            border: Border.all(
-              color: AppColors.gold.withValues(alpha: 0.7),
-              width: 1.5,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x66000000),
-                blurRadius: 10,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
+      opacity: enabled ? 1.0 : 0.48,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: primary
+              ? MaqhaGradients.primaryGoldCta
+              : MaqhaGradients.charcoalCard,
+          borderRadius: radius,
+          border: primary
+              ? null
+              : Border.all(color: MaqhaColors.borderSubtle, width: 1),
+          boxShadow: enabled
+              ? (primary ? MaqhaShadows.goldCtaGlow : MaqhaShadows.softCard)
+              : const [],
+        ),
+        child: Material(
+          color: Colors.transparent,
           child: InkWell(
             borderRadius: radius,
             onTap: onPressed,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding: EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: hasSubtitle ? 12 : 13,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (icon != null) ...[
-                    Icon(icon, color: foreground),
-                    const SizedBox(width: 12),
+                    Icon(icon, color: iconColor, size: 21),
+                    const SizedBox(width: 10),
                   ],
                   Flexible(
                     child: Column(
@@ -73,20 +77,26 @@ class GameButton extends StatelessWidget {
                           label,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: foreground,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                            color: fgTitle,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
                           ),
                         ),
-                        if (subtitle != null)
+                        if (hasSubtitle) ...[
+                          const SizedBox(height: 2),
                           Text(
                             subtitle!,
                             textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: foreground.withValues(alpha: 0.75),
-                              fontSize: 13,
+                              color: fgSub,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ),

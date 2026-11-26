@@ -69,7 +69,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('جارٍ البحث عن لاعبين...'), findsOneWidget);
     expect(find.text('2/4 لاعبين'), findsOneWidget);
-    expect(find.textContaining('💡'), findsOneWidget);
+    expect(find.byIcon(Icons.lightbulb_outline_rounded), findsOneWidget);
 
     await tester.tap(find.text('إلغاء'));
     await tester.pump();

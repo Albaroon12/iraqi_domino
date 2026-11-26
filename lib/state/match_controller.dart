@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../ai/ai_difficulty.dart';
 import '../ai/ai_persona.dart';
 import '../ai/domino_ai.dart';
 import '../ai/user_play_profile.dart';
@@ -13,6 +14,7 @@ import '../engine/domino_piece.dart';
 import '../engine/game_rules_config.dart';
 import '../engine/match_state.dart';
 import '../engine/match_view_state.dart';
+import '../engine/round_result.dart';
 import '../engine/seat_occupant.dart';
 import 'settings_provider.dart';
 
@@ -271,14 +273,34 @@ class MatchController extends Notifier<MatchViewState> {
         if (_match.isOver) {
           _showResultPending = true;
           final won = _match.winnerTeam == 0;
-          final roundsWon = _match.history
-              .where((r) => r.result.winnerTeam == 0)
-              .length;
+          var roundsWon = 0;
+          var roundsLost = 0;
+          var dominoWins = 0;
+          var blockedWins = 0;
+          var highestRound = 0;
+          for (final rec in _match.history) {
+            final r = rec.result;
+            if (r.winnerTeam == 0) {
+              roundsWon++;
+              if (r.kind == RoundEndKind.domino) dominoWins++;
+              if (r.kind == RoundEndKind.blocked) blockedWins++;
+              if (r.points > highestRound) highestRound = r.points;
+            } else if (r.winnerTeam == 1) {
+              roundsLost++;
+            }
+          }
           try {
             ref.read(gameDataCenterProvider.notifier).recordMatchOutcome(
                   won: won,
                   ourScore: _match.scores[0],
+                  opponentScore: _match.scores[1],
                   roundsWonInMatch: roundsWon,
+                  roundsLostInMatch: roundsLost,
+                  dominoWinsInMatch: dominoWins,
+                  blockedWinsInMatch: blockedWins,
+                  highestRoundPoints: highestRound,
+                  beatExpertAi: arg.rules.aiDifficulty == AiDifficulty.expert,
+                  isOnlineMatch: false,
                 );
           } catch (_) {}
           _emit();

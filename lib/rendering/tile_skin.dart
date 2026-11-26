@@ -16,7 +16,7 @@ class TileSkin {
     required this.pipRim,
   });
 
-  /// Stable identifier. This is what we will save in the player's profile.
+  /// Stable identifier saved in settings / player profile.
   final String id;
 
   /// Tile body gradient: top-left color and bottom-right color.
@@ -77,8 +77,68 @@ class TileSkin {
     pipRim: Color(0x55000000),
   );
 
-  /// Every skin available in the game (later: filtered by what is owned).
-  static const List<TileSkin> all = [ivory, ebony, ruby];
+  static const TileSkin amber = TileSkin(
+    id: 'amber',
+    bodyLight: Color(0xFFF6BE58),
+    bodyDark: Color(0xFFB86A14),
+    bevelLight: Color(0x99FFF2C2),
+    bevelDark: Color(0x775E2D00),
+    grooveColor: Color(0x88421E00),
+    grooveEdge: Color(0x88FFE49E),
+    pipHighlight: Color(0xFF4A2508),
+    pipDark: Color(0xFF1E0B00),
+    pipRim: Color(0x77FFE6A8),
+  );
+
+  static const TileSkin turquoise = TileSkin(
+    id: 'turquoise',
+    bodyLight: Color(0xFF3BC4C0),
+    bodyDark: Color(0xFF106A70),
+    bevelLight: Color(0x88CCFBF8),
+    bevelDark: Color(0x77053336),
+    grooveColor: Color(0x88042B2E),
+    grooveEdge: Color(0x66B8F5F0),
+    pipHighlight: Color(0xFFFFF8DC),
+    pipDark: Color(0xFFE6C667),
+    pipRim: Color(0x55042B2E),
+  );
+
+  static const TileSkin pearl = TileSkin(
+    id: 'pearl',
+    bodyLight: Color(0xFFFFFFFF),
+    bodyDark: Color(0xFFDCE4EE),
+    bevelLight: Color(0xEEFFFFFF),
+    bevelDark: Color(0x447C8EA6),
+    grooveColor: Color(0x663B4D66),
+    grooveEdge: Color(0xCCFFFFFF),
+    pipHighlight: Color(0xFF28467A),
+    pipDark: Color(0xFF0E1F3D),
+    pipRim: Color(0xAAFFFFFF),
+  );
+
+  static const TileSkin royalEmerald = TileSkin(
+    id: 'royal_emerald',
+    bodyLight: Color(0xFF1D6B48),
+    bodyDark: Color(0xFF072B1A),
+    bevelLight: Color(0x77D4AF37),
+    bevelDark: Color(0x9902120A),
+    grooveColor: Color(0xCCD4AF37),
+    grooveEdge: Color(0x66FFE082),
+    pipHighlight: Color(0xFFFFF3B0),
+    pipDark: Color(0xFFD4AF37),
+    pipRim: Color(0x77031A0F),
+  );
+
+  /// Every Domino stone skin available in the game.
+  static const List<TileSkin> all = [
+    ivory,
+    ebony,
+    ruby,
+    amber,
+    turquoise,
+    pearl,
+    royalEmerald,
+  ];
 
   /// Finds a skin by its saved id; falls back to ivory if unknown.
   static TileSkin byId(String id) =>

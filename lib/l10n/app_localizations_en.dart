@@ -10,7 +10,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Iraqi Domino';
+  String get appTitle => 'Al-Maqha';
 
   @override
   String get tileGallery => 'Tile Gallery';

@@ -219,4 +219,230 @@ void main() {
     );
     expect(latestSnap.boardMoves, isEmpty);
   });
+
+  test('DominoOnlineServer serves /admin dashboard and dynamically publishes Ramadan & Monthly events', () async {
+    final server = DominoOnlineServer(adminSecret: 'secret_ramadan_key');
+    final port = await server.start(
+      address: InternetAddress.loopbackIPv4,
+      bindPort: 0,
+    );
+    addTearDown(server.stop);
+
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+
+    // 1. Verify Arabic Web Control Panel is served at GET /admin:
+    final adminPageReq = await client.getUrl(
+      Uri.parse('http://127.0.0.1:$port/admin'),
+    );
+    final adminPageRes = await adminPageReq.close();
+    expect(adminPageRes.statusCode, HttpStatus.ok);
+    final adminHtml = await utf8.decoder.bind(adminPageRes).join();
+    expect(adminHtml, contains('لوحة إدارة المقهى'));
+
+    // 2. Unauthorized admin API call is rejected (401):
+    final badAuthReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/admin/events/upsert'),
+    );
+    badAuthReq.headers.set(HttpHeaders.authorizationHeader, 'Bearer wrong_key');
+    badAuthReq.write(jsonEncode({'id': 'ev_hack'}));
+    final badAuthRes = await badAuthReq.close();
+    await badAuthRes.drain<void>();
+    expect(badAuthRes.statusCode, HttpStatus.unauthorized);
+
+    // 3. Publish a Ramadan Event scheduled for March via Admin API:
+    final pubReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/admin/events/upsert'),
+    );
+    pubReq.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer secret_ramadan_key',
+    );
+    pubReq.headers.contentType = ContentType.json;
+    pubReq.add(
+      utf8.encode(
+        jsonEncode({
+          'id': 'ev_ramadan_2026',
+          'titleAr': 'أمسيات رمضان المبارك',
+          'titleEn': 'Ramadan Majlis',
+          'descAr': 'اربح 5 مباريات في رمضان',
+          'descEn': 'Win 5 matches in Ramadan',
+          'theme': 'ramadan',
+          'metric': 'matches_won',
+          'targetValue': 5,
+          'rewardDinars': 450,
+          'rewardBonusXp': 300,
+          'startDateIso': '2026-03-01',
+          'endDateIso': '2026-03-30',
+          'enabled': true,
+        }),
+      ),
+    );
+    final pubRes = await pubReq.close();
+    await pubRes.drain<void>();
+    expect(pubRes.statusCode, HttpStatus.ok);
+
+    // 4. Mobile app querying /api/live-ops during Ramadan sees the event live:
+    final marchReq = await client.getUrl(
+      Uri.parse('http://127.0.0.1:$port/api/live-ops?date=2026-03-15'),
+    );
+    final marchRes = await marchReq.close();
+    final marchJson =
+        jsonDecode(await utf8.decoder.bind(marchRes).join())
+            as Map<String, Object?>;
+    final marchEvents = marchJson['events'] as List<Object?>;
+    expect(
+      marchEvents.any(
+        (e) => (e as Map<String, Object?>)['id'] == 'ev_ramadan_2026',
+      ),
+      isTrue,
+    );
+
+    // 5. After Ramadan ends (May), /api/live-ops automatically hides it:
+    final mayReq = await client.getUrl(
+      Uri.parse('http://127.0.0.1:$port/api/live-ops?date=2026-05-01'),
+    );
+    final mayRes = await mayReq.close();
+    final mayJson =
+        jsonDecode(await utf8.decoder.bind(mayRes).join())
+            as Map<String, Object?>;
+    final mayEvents = mayJson['events'] as List<Object?>;
+    expect(
+      mayEvents.any(
+        (e) => (e as Map<String, Object?>)['id'] == 'ev_ramadan_2026',
+      ),
+      isFalse,
+    );
+
+    // 6. Publish a Custom Sponsored Ad Event with an image + test Admin Account Ban & Cancellation:
+    final regReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/auth/oauth'),
+    );
+    regReq.headers.contentType = ContentType.json;
+    regReq.add(
+      utf8.encode(
+        jsonEncode({
+          'provider': 'google',
+          'providerUid': 'karrar@gmail.com',
+          'displayName': 'كرار البغدادي',
+        }),
+      ),
+    );
+    final regRes = await regReq.close();
+    final regMap =
+        jsonDecode(await utf8.decoder.bind(regRes).join())
+            as Map<String, Object?>;
+    final userMap = regMap['account'] as Map<String, Object?>;
+    final userId = userMap['playerId'] as String;
+    expect(userMap['authProvider'], 'google');
+
+    // Temporarily ban player via /api/admin/accounts/ban:
+    final banReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/admin/accounts/ban'),
+    );
+    banReq.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer secret_ramadan_key',
+    );
+    banReq.headers.contentType = ContentType.json;
+    banReq.add(
+      utf8.encode(
+        jsonEncode({
+          'userId': userId,
+          'durationHours': 48,
+          'reason': 'سلوك مخالف',
+        }),
+      ),
+    );
+    final banRes = await banReq.close();
+    await banRes.drain<void>();
+    expect(banRes.statusCode, HttpStatus.ok);
+
+    // Banned player attempting Google sign-in gets 400 with ban reason:
+    final blockedLoginReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/auth/oauth'),
+    );
+    blockedLoginReq.headers.contentType = ContentType.json;
+    blockedLoginReq.add(
+      utf8.encode(
+        jsonEncode({
+          'provider': 'google',
+          'providerUid': 'karrar@gmail.com',
+          'displayName': 'كرار',
+        }),
+      ),
+    );
+    final blockedRes = await blockedLoginReq.close();
+    final blockedJson =
+        jsonDecode(await utf8.decoder.bind(blockedRes).join())
+            as Map<String, Object?>;
+    expect(blockedRes.statusCode, HttpStatus.badRequest);
+    expect(blockedJson['error'] as String, contains('محظور مؤقتاً'));
+
+    // Unban -> then Cancel/Delete account completely:
+    final unbanReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/admin/accounts/unban'),
+    );
+    unbanReq.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer secret_ramadan_key',
+    );
+    unbanReq.headers.contentType = ContentType.json;
+    unbanReq.add(utf8.encode(jsonEncode({'userId': userId})));
+    final unbanRes = await unbanReq.close();
+    await unbanRes.drain<void>();
+    expect(unbanRes.statusCode, HttpStatus.ok);
+
+    final delReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/admin/accounts/delete'),
+    );
+    delReq.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer secret_ramadan_key',
+    );
+    delReq.headers.contentType = ContentType.json;
+    delReq.add(utf8.encode(jsonEncode({'userId': userId})));
+    final delRes = await delReq.close();
+    final delJson =
+        jsonDecode(await utf8.decoder.bind(delRes).join())
+            as Map<String, Object?>;
+    expect(delJson['deleted'], isTrue);
+
+    // 7. Phase 11 Store Compliance: user can permanently delete their OWN account via /api/account/delete-self:
+    final selfRegReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/auth/oauth'),
+    );
+    selfRegReq.headers.contentType = ContentType.json;
+    selfRegReq.add(
+      utf8.encode(
+        jsonEncode({
+          'provider': 'google',
+          'providerUid': 'selfdelete@gmail.com',
+          'displayName': 'مستخدم تجريبي',
+        }),
+      ),
+    );
+    final selfRegRes = await selfRegReq.close();
+    final selfRegMap =
+        jsonDecode(await utf8.decoder.bind(selfRegRes).join())
+            as Map<String, Object?>;
+    final selfTok =
+        (selfRegMap['account'] as Map<String, Object?>)['authToken'] as String;
+
+    final selfDelReq = await client.postUrl(
+      Uri.parse('http://127.0.0.1:$port/api/account/delete-self'),
+    );
+    selfDelReq.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $selfTok',
+    );
+    selfDelReq.headers.contentType = ContentType.json;
+    selfDelReq.add(utf8.encode('{}'));
+    final selfDelRes = await selfDelReq.close();
+    final selfDelMap =
+        jsonDecode(await utf8.decoder.bind(selfDelRes).join())
+            as Map<String, Object?>;
+    expect(selfDelRes.statusCode, HttpStatus.ok);
+    expect(selfDelMap['deleted'], isTrue);
+  });
 }

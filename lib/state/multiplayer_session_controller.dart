@@ -7,6 +7,7 @@ import '../data/game_data_center.dart';
 import '../engine/board.dart';
 import '../engine/domino_piece.dart';
 import '../engine/game_rules_config.dart';
+import '../engine/round_result.dart';
 import '../network/protocol/connection_channel.dart';
 import '../network/protocol/wire_messages.dart';
 import '../network/session/authoritative_room_host.dart';
@@ -455,13 +456,32 @@ class MultiplayerSessionController extends Notifier<MultiplayerSessionState> {
       if (completedId > _recordedMatchCount) {
         _recordedMatchCount = completedId;
         final won = view.matchWinnerTeam == 0;
-        final roundsWon = view.history
-            .where((r) => r.result.winnerTeam == 0)
-            .length;
+        var roundsWon = 0;
+        var roundsLost = 0;
+        var dominoWins = 0;
+        var blockedWins = 0;
+        var highestRound = 0;
+        for (final rec in view.history) {
+          final r = rec.result;
+          if (r.winnerTeam == 0) {
+            roundsWon++;
+            if (r.kind == RoundEndKind.domino) dominoWins++;
+            if (r.kind == RoundEndKind.blocked) blockedWins++;
+            if (r.points > highestRound) highestRound = r.points;
+          } else if (r.winnerTeam == 1) {
+            roundsLost++;
+          }
+        }
         ref.read(gameDataCenterProvider.notifier).recordMatchOutcome(
               won: won,
               ourScore: view.scores[0],
+              opponentScore: view.scores[1],
               roundsWonInMatch: roundsWon,
+              roundsLostInMatch: roundsLost,
+              dominoWinsInMatch: dominoWins,
+              blockedWinsInMatch: blockedWins,
+              highestRoundPoints: highestRound,
+              isOnlineMatch: true,
             );
       }
     } else if (!view.isMatchOver && view.history.isEmpty) {

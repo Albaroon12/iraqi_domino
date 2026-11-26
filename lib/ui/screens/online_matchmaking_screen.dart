@@ -99,7 +99,7 @@ class _OnlineMatchmakingScreenState
                     ? Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          color: const Color(0xDD1D110A),
+                          color: AppColors.surfaceCharcoal,
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(color: const Color(0xFFE57373)),
                         ),
@@ -130,11 +130,9 @@ class _OnlineMatchmakingScreenState
                       )
                     : GameLoadingCard(
                         title: isAr
-                            ? 'جارٍ البحث عن لاعبين ($humanCount/$total)...'
-                            : 'Searching for players ($humanCount/$total)...',
-                        subtitle: isAr
-                            ? 'حسابك: ${account.displayName} • الهدف ${widget.rules.targetScore}\n(يكمل الذكاء الاصطناعي أي مقعد شاغر تلقائياً)'
-                            : 'Player: ${account.displayName} • Target ${widget.rules.targetScore}',
+                            ? 'جارٍ البحث عن لاعبين ($humanCount/$total)'
+                            : 'Searching ($humanCount/$total)',
+                        subtitle: '${account.displayName} • ${widget.rules.targetScore}',
                         onCancel: _cancelSearch,
                       ),
               ),

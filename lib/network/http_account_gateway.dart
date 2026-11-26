@@ -25,7 +25,22 @@ class HttpRemoteAccountGateway implements RemoteAccountGateway {
     final Uri uri;
     final Map<String, Object?> payload;
 
-    if (isRegister) {
+    if (provider == AuthProviderKind.google) {
+      final colonIdx = credentialToken.indexOf(':');
+      final providerUid = colonIdx > 0
+          ? credentialToken.substring(0, colonIdx)
+          : credentialToken;
+      final displayName = colonIdx > 0
+          ? credentialToken.substring(colonIdx + 1)
+          : currentLocalAccount.displayName;
+      uri = Uri.parse('$baseUrl/api/auth/oauth');
+      payload = {
+        'provider': provider.id,
+        'providerUid': providerUid,
+        'displayName': displayName,
+        'guestAccount': currentLocalAccount.toJson(),
+      };
+    } else if (isRegister) {
       final parts = credentialToken.split(':');
       final name = parts.length > 1 ? parts[1] : currentLocalAccount.displayName;
       final email = parts.length > 2 ? parts[2] : '';
@@ -72,6 +87,13 @@ class HttpRemoteAccountGateway implements RemoteAccountGateway {
       {'account': account.toJson()},
       authToken: token,
     );
+  }
+
+  @override
+  Future<void> deleteOwnAccount(String authToken) async {
+    if (authToken.isEmpty) return;
+    final uri = Uri.parse('$baseUrl/api/account/delete-self');
+    await _postJson(uri, const {}, authToken: authToken);
   }
 
   Future<Map<String, Object?>> _postJson(

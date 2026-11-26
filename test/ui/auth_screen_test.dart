@@ -13,8 +13,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AuthScreen), findsOneWidget);
+    expect(find.text('تسجيل الدخول باستخدام Google'), findsOneWidget);
+    expect(find.text('الدخول عن طريق رقم الهاتف'), findsOneWidget);
+    expect(find.text('غير مفعل'), findsOneWidget);
     expect(find.text('المتابعة كضيف'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('المتابعة كضيف'));
     await tester.tap(find.text('المتابعة كضيف'));
     await tester.pumpAndSettle();
 
@@ -37,6 +41,7 @@ void main() {
     await tester.enterText(fields.at(1), 'haider@baghdad.iq');
     await tester.enterText(fields.at(2), 'secret123');
 
+    await tester.ensureVisible(find.text('إنشاء وربط الحساب'));
     await tester.tap(find.text('إنشاء وربط الحساب'));
     await tester.pumpAndSettle();
 

@@ -1,9 +1,10 @@
 import 'package:flutter/widgets.dart';
 
+import '../core/theme/maqha_design_system.dart';
 import 'table_skin.dart';
-import 'wood_table_painter.dart';
 
-/// A wooden table that fills its parent. Put game content in [child].
+/// Renders the app-wide Emerald-Teal canvas with warm center spotlight and
+/// subtle translucent Domino silhouettes (`MaqhaEmeraldBackground`).
 class WoodTable extends StatelessWidget {
   const WoodTable({super.key, this.skin = TableSkin.walnut, this.child});
 
@@ -12,15 +13,8 @@ class WoodTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // RepaintBoundary caches the heavy drawing, so moving tiles above it
-    // does not force the wood to be painted again.
-    return RepaintBoundary(
-      child: SizedBox.expand(
-        child: CustomPaint(
-          painter: WoodTablePainter(skin: skin),
-          child: child,
-        ),
-      ),
+    return MaqhaEmeraldBackground(
+      child: child ?? const SizedBox.expand(),
     );
   }
 }

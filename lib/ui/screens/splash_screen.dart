@@ -1,10 +1,10 @@
-import 'dart:math' as math;
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/audio/sound_service.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/network/connectivity_provider.dart';
+import '../../core/theme/maqha_design_system.dart';
 import '../../data/game_data_center.dart';
 import '../../l10n/app_localizations.dart';
 import '../../rendering/domino_tile.dart';
@@ -13,13 +13,7 @@ import '../../state/settings_provider.dart';
 import 'app_shell_screen.dart';
 import 'auth_screen.dart';
 
-/// Animated Iraqi heritage startup Splash Screen (`#140B07` walnut-dark theme).
-///
-/// Runs a bounded startup animation while performing real boot initialization:
-/// 1. Loads saved settings & active [TileSkin].
-/// 2. Initializes & verifies [GameDataCenter] player session (Guest / Signed-In).
-/// 3. Pre-warms [SoundService] audio asset lookup cache.
-/// 4. Smoothly fades into [AppShellScreen] (or `AuthScreen` in Step 7.2).
+/// Animated Emerald-Teal & Gold startup Splash Screen for **المقهى**.
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({
     super.key,
@@ -46,7 +40,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: widget.duration);
-    _emblemScale = Tween<double>(begin: 0.86, end: 1.0).animate(
+    _emblemScale = Tween<double>(begin: 0.88, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.0, 0.55, curve: Curves.easeOutBack),
@@ -72,6 +66,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   Future<void> _runBootInitialization() async {
     try {
       await Future.wait([
+        ref.read(connectivityProvider.notifier).refreshConnectivity(),
         ref.read(gameDataCenterProvider.notifier).verifyBootSession(),
         ref.read(soundServiceProvider).warmUp(),
       ]);
@@ -85,12 +80,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   void _tryProceed() {
     if (_navigated || !_bootDone || !mounted) return;
     _navigated = true;
+    final isOnline = ref.read(connectivityProvider).isOnline;
     final hasEnteredBefore = ref
         .read(gameDataCenterProvider.notifier)
         .hasCompletedInitialEntry;
     final destination =
         widget.nextScreen ??
-        (hasEnteredBefore ? const AppShellScreen() : const AuthScreen());
+        ((!isOnline || hasEnteredBefore)
+            ? const AppShellScreen()
+            : const AuthScreen());
     Navigator.of(context).pushReplacement(
       PageRouteBuilder<void>(
         transitionDuration: const Duration(milliseconds: 260),
@@ -112,7 +110,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           ? 'جارٍ التحقق من الحساب ومركز البيانات...'
           : 'Verifying account & data hub...';
     }
-    return isAr ? 'أهلاً بك في المقهى العراقي...' : 'Entering Iraqi Café...';
+    return isAr ? 'أهلاً بك في المقهى...' : 'Entering Al-Maqha...';
   }
 
   @override
@@ -128,153 +126,130 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final skin = TileSkin.byId(ref.watch(settingsProvider).tileSkinId);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF140B07),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Radial walnut background + cached Baghdadi star ornament
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0, -0.15),
-                radius: 1.05,
-                colors: [
-                  Color(0xFF2E1B11),
-                  Color(0xFF180E09),
-                  Color(0xFF0C0704),
-                ],
-                stops: [0.0, 0.55, 1.0],
-              ),
-            ),
-          ),
-          const RepaintBoundary(
-            child: CustomPaint(painter: _SplashArabesquePainter()),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-              child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) {
-                  final progress = _controller.value;
-                  final percent = (progress * 100).round();
+      backgroundColor: MaqhaColors.bgDeepTeal,
+      body: MaqhaEmeraldBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                final progress = _controller.value;
+                final percent = (progress * 100).round();
 
-                  return Column(
-                    children: [
-                      const Spacer(flex: 3),
-                      // Centerpiece: Fanned Iraqi Domino crest led by Dooshaysh (6-6)
-                      FadeTransition(
-                        opacity: _emblemOpacity,
-                        child: ScaleTransition(
-                          scale: _emblemScale,
-                          child: _DominoCrestMedallion(skin: skin),
+                return Column(
+                  children: [
+                    const Spacer(flex: 3),
+                    FadeTransition(
+                      opacity: _emblemOpacity,
+                      child: ScaleTransition(
+                        scale: _emblemScale,
+                        child: _DominoCrestMedallion(skin: skin),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    FadeTransition(
+                      opacity: _emblemOpacity,
+                      child: Text(
+                        l10n.appTitle,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: MaqhaColors.goldBright,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      FadeTransition(
-                        opacity: _emblemOpacity,
-                        child: Text(
-                          l10n.appTitle,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: AppColors.gold,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    FadeTransition(
+                      opacity: _emblemOpacity,
+                      child: Container(
+                        width: 54,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: MaqhaColors.goldPrimary,
+                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      FadeTransition(
-                        opacity: _emblemOpacity,
-                        child: Text(
-                          isAr
-                              ? 'أصالة المقهى البغدادي'
-                              : 'Authentic Baghdadi Café Edition',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.ivory.withValues(alpha: 0.72),
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w500,
-                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    FadeTransition(
+                      opacity: _emblemOpacity,
+                      child: Text(
+                        isAr
+                            ? 'أصالة المقهى البغدادي'
+                            : 'Authentic Heritage Lounge',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: MaqhaColors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const Spacer(flex: 4),
-                      // Sculpted gold loading bar & live boot stage text
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 260),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    _stageText(isAr, progress),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: AppColors.ivory.withValues(
-                                        alpha: 0.82,
-                                      ),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '$percent%',
+                    ),
+                    const Spacer(flex: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 260),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _stageText(isAr, progress),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    color: AppColors.gold,
+                                    color: MaqhaColors.textSecondary,
                                     fontSize: 12,
-                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              height: 7,
-                              decoration: BoxDecoration(
-                                color: const Color(0x66000000),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: AppColors.gold.withValues(alpha: 0.35),
-                                  width: 0.8,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '$percent%',
+                                style: const TextStyle(
+                                  color: AppColors.gold,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Align(
-                                  alignment: AlignmentDirectional.centerStart,
-                                  child: FractionallySizedBox(
-                                    widthFactor: progress.clamp(0.04, 1.0),
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Color(0xFFB8862D),
-                                            AppColors.gold,
-                                            Color(0xFFFFE599),
-                                          ],
-                                        ),
-                                      ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: MaqhaColors.cardCharcoal,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: MaqhaColors.borderSubtle),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: FractionallySizedBox(
+                                  widthFactor: progress.clamp(0.04, 1.0),
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: MaqhaGradients.primaryGoldCta,
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                    ],
-                  );
-                },
-              ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                );
+              },
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -288,97 +263,37 @@ class _DominoCrestMedallion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 148,
-      height: 148,
+      width: 142,
+      height: 142,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const RadialGradient(
-          colors: [Color(0xFF235C3D), Color(0xFF112E1E)],
-        ),
-        border: Border.all(color: AppColors.gold, width: 2.2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.22),
-            blurRadius: 28,
-            spreadRadius: 2,
-          ),
-          const BoxShadow(
-            color: Color(0xAA000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
+        color: MaqhaColors.cardCharcoal,
+        border: Border.all(color: MaqhaColors.goldPrimary, width: 1.8),
+        boxShadow: MaqhaShadows.goldCtaGlow,
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
           Transform.translate(
-            offset: const Offset(-26, 6),
+            offset: const Offset(-25, 6),
             child: Transform.rotate(
               angle: -0.24,
-              child: DominoTile(top: 5, bottom: 4, width: 32, skin: skin),
+              child: DominoTile(top: 5, bottom: 4, width: 30, skin: skin),
             ),
           ),
           Transform.translate(
-            offset: const Offset(26, 6),
+            offset: const Offset(25, 6),
             child: Transform.rotate(
               angle: 0.24,
-              child: DominoTile(top: 6, bottom: 5, width: 32, skin: skin),
+              child: DominoTile(top: 6, bottom: 5, width: 30, skin: skin),
             ),
           ),
           Transform.translate(
             offset: const Offset(0, -4),
-            child: DominoTile(top: 6, bottom: 6, width: 38, skin: skin),
+            child: DominoTile(top: 6, bottom: 6, width: 36, skin: skin),
           ),
         ],
       ),
     );
   }
-}
-
-/// Subtle Baghdadi 8-pointed geometric star rings drawn behind the splash crest.
-class _SplashArabesquePainter extends CustomPainter {
-  const _SplashArabesquePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.38);
-    final maxR = math.min(size.width, size.height) * 0.44;
-    final linePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = AppColors.gold.withValues(alpha: 0.08);
-
-    for (final factor in [0.55, 0.78, 1.0]) {
-      final r = maxR * factor;
-      canvas.drawCircle(center, r, linePaint);
-      _drawEightPointStar(canvas, center, r, linePaint);
-    }
-  }
-
-  void _drawEightPointStar(
-    Canvas canvas,
-    Offset c,
-    double r,
-    Paint paint,
-  ) {
-    for (var rot = 0; rot < 2; rot++) {
-      final offsetAngle = rot * (math.pi / 4);
-      final path = Path();
-      for (var i = 0; i < 4; i++) {
-        final a = offsetAngle + i * (math.pi / 2);
-        final pt = Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a));
-        if (i == 0) {
-          path.moveTo(pt.dx, pt.dy);
-        } else {
-          path.lineTo(pt.dx, pt.dy);
-        }
-      }
-      path.close();
-      canvas.drawPath(path, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

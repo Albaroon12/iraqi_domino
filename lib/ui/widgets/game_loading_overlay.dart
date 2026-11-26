@@ -36,7 +36,7 @@ class GameLoadingOverlay extends StatelessWidget {
         if (visible)
           Positioned.fill(
             child: ColoredBox(
-              color: const Color(0xCC0A0503),
+              color: const Color(0xCC081E1E),
               child: Center(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(
@@ -128,19 +128,15 @@ class _GameLoadingCardState extends ConsumerState<GameLoadingCard>
       child: Container(
         padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF2B1A10), Color(0xFF160C07)],
-          ),
-          borderRadius: BorderRadius.circular(22),
+          color: const Color(0xF2182022),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: AppColors.gold.withValues(alpha: 0.65),
-            width: 1.4,
+            color: AppColors.borderSubtle,
+            width: 1.1,
           ),
           boxShadow: const [
             BoxShadow(
-              color: Color(0xCC000000),
+              color: Color(0x99000000),
               blurRadius: 24,
               offset: Offset(0, 10),
             ),
@@ -214,20 +210,29 @@ class _GameLoadingCardState extends ConsumerState<GameLoadingCard>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
-                color: const Color(0x55000000),
+                color: const Color(0x44000000),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.gold.withValues(alpha: 0.22),
-                ),
+                border: Border.all(color: AppColors.borderSubtle),
               ),
-              child: Text(
-                isAr ? '💡 $tip' : '💡 $tip',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.ivory.withValues(alpha: 0.72),
-                  fontSize: 11.5,
-                  height: 1.35,
-                ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.lightbulb_outline_rounded,
+                    color: AppColors.gold,
+                    size: 17,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      tip,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (widget.onCancel != null) ...[

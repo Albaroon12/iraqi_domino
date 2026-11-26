@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data' show BytesBuilder;
 
 import '../ai/ai_difficulty.dart';
+import '../data/cafe_events_and_tournaments.dart';
 import '../data/player_account.dart';
 import '../engine/game_rules_config.dart';
 import '../network/protocol/connection_channel.dart';
@@ -11,6 +13,7 @@ import '../network/protocol/wire_messages.dart';
 import '../network/session/authoritative_room_host.dart';
 import '../network/transport/peer_transport.dart';
 import 'server_account_store.dart';
+import 'server_live_ops_store.dart';
 
 /// Pure-Dart authoritative Online Domino Server (`HttpServer` + `WebSocket`).
 ///
@@ -22,11 +25,25 @@ import 'server_account_store.dart';
 /// - Reuses [AuthoritativeRoomHost] in server RAM for sub-30ms move latency
 ///   and 100% anti-cheat hand/boneyard masking.
 class DominoOnlineServer {
-  DominoOnlineServer({String? storageFilePath, Random? random})
-    : accounts = ServerAccountStore(storageFilePath: storageFilePath),
-      _random = random ?? Random();
+  DominoOnlineServer({
+    String? storageFilePath,
+    String? adminSecret,
+    Random? random,
+  }) : accounts = ServerAccountStore(storageFilePath: storageFilePath),
+       liveOps = ServerLiveOpsStore(
+         storageFilePath: storageFilePath == null || storageFilePath.isEmpty
+             ? null
+             : '$storageFilePath.liveops.json',
+       ),
+       adminSecret =
+           adminSecret ??
+           Platform.environment['ADMIN_SECRET'] ??
+           'maqha_admin_2026',
+       _random = random ?? Random();
 
   final ServerAccountStore accounts;
+  final ServerLiveOpsStore liveOps;
+  final String adminSecret;
   final Random _random;
 
   HttpServer? _httpServer;
@@ -75,6 +92,7 @@ class DominoOnlineServer {
 
   Future<void> _handleHttpRequest(HttpRequest req) async {
     req.response.headers.set('Access-Control-Allow-Origin', '*');
+    req.response.headers.set('X-Content-Type-Options', 'nosniff');
     req.response.headers.set(
       'Access-Control-Allow-Methods',
       'GET, POST, OPTIONS',
@@ -155,6 +173,22 @@ class DominoOnlineServer {
         return;
       }
 
+      if (req.method == 'POST' && path == '/api/auth/oauth') {
+        final body = await _readJsonBody(req);
+        final guest = PlayerAccount.tryDecode(
+          body['guestAccount'] is Map<String, Object?>
+              ? jsonEncode(body['guestAccount'])
+              : null,
+        );
+        final googleAcc = accounts.loginOrRegisterGoogle(
+          googleEmail: (body['providerUid'] as String?) ?? '',
+          displayName: (body['displayName'] as String?) ?? '',
+          guestAccount: guest,
+        );
+        await _writeJson(req, HttpStatus.ok, {'account': googleAcc.toJson()});
+        return;
+      }
+
       if (req.method == 'POST' && path == '/api/profile/sync') {
         final token = req.headers.value(HttpHeaders.authorizationHeader) ?? '';
         final body = await _readJsonBody(req);
@@ -183,6 +217,20 @@ class DominoOnlineServer {
         return;
       }
 
+      if (req.method == 'POST' && path == '/api/account/delete-self') {
+        final token = req.headers.value(HttpHeaders.authorizationHeader) ?? '';
+        final verified = accounts.verifyToken(token);
+        if (verified == null) {
+          await _writeJson(req, HttpStatus.unauthorized, {
+            'error': 'جلسة الدخول غير صالحة',
+          });
+          return;
+        }
+        final deleted = accounts.cancelAndDeleteAccount(verified.playerId);
+        await _writeJson(req, HttpStatus.ok, {'deleted': deleted});
+        return;
+      }
+
       if (req.method == 'GET' && path == '/api/rooms') {
         final pc = int.tryParse(req.uri.queryParameters['playerCount'] ?? '');
         final rooms = [
@@ -192,6 +240,175 @@ class DominoOnlineServer {
         ];
         await _writeJson(req, HttpStatus.ok, {'rooms': rooms});
         return;
+      }
+
+      // Public LiveOps feed: active seasonal/monthly Events & Tournament tiers
+      if (req.method == 'GET' && path == '/api/live-ops') {
+        final dateOverride = req.uri.queryParameters['date'];
+        await _writeJson(req, HttpStatus.ok, {
+          'events': [
+            for (final e in liveOps.activeEvents(dateOverride)) e.toJson(),
+          ],
+          'tournaments': [
+            for (final t in liveOps.activeTournaments) t.toJson(),
+          ],
+        });
+        return;
+      }
+
+      // Built-in Arabic Web Admin Dashboard (`/admin`)
+      if (req.method == 'GET' && path == '/admin') {
+        req.response.statusCode = HttpStatus.ok;
+        req.response.headers.set('X-Frame-Options', 'DENY');
+        req.response.headers.contentType = ContentType.html;
+        req.response.write(kAdminDashboardHtml);
+        await req.response.close();
+        return;
+      }
+
+      // Protected Admin LiveOps API (`/api/admin/*`)
+      if (path.startsWith('/api/admin/')) {
+        final auth =
+            req.headers
+                .value(HttpHeaders.authorizationHeader)
+                ?.replaceFirst('Bearer ', '')
+                .trim() ??
+            '';
+        if (auth != adminSecret) {
+          await _writeJson(req, HttpStatus.unauthorized, {
+            'error': 'مفتاح الإدارة ADMIN_SECRET غير صحيح',
+          });
+          return;
+        }
+
+        if (req.method == 'GET' && path == '/api/admin/overview') {
+          final search = req.uri.queryParameters['q'];
+          await _writeJson(req, HttpStatus.ok, {
+            'stats': {
+              'totalAccounts': accounts.totalAccountCount,
+              'bannedAccounts': accounts.activeBannedCount(),
+              'activeRooms': _roomsByCode.length,
+              'activeEvents': liveOps.activeEvents().length,
+              'activeTournaments': liveOps.activeTournaments.length,
+            },
+            'accounts': accounts.listAccountsForAdmin(search: search),
+            'rooms': [
+              for (final r in _roomsByCode.values) r.toDiscoveredRoom().toJson(),
+            ],
+            'events': [for (final e in liveOps.allEvents) e.toJson()],
+            'tournaments': [
+              for (final t in liveOps.allTournaments) t.toJson(),
+            ],
+          });
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/accounts/ban') {
+          final body = await _readJsonBody(req);
+          final userId = (body['userId'] as String?) ?? '';
+          final hours = (body['durationHours'] as num?)?.toInt() ?? 24;
+          final reason = (body['reason'] as String?) ?? '';
+          final banned = accounts.banAccount(
+            userId: userId,
+            durationHours: hours,
+            reason: reason,
+          );
+          if (banned == null) {
+            await _writeJson(req, HttpStatus.notFound, {
+              'error': 'الحساب غير موجود',
+            });
+            return;
+          }
+          await _writeJson(req, HttpStatus.ok, {
+            'account': banned.toAdminSummaryJson(),
+          });
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/accounts/unban') {
+          final body = await _readJsonBody(req);
+          final unbanned = accounts.unbanAccount(
+            (body['userId'] as String?) ?? '',
+          );
+          await _writeJson(req, HttpStatus.ok, {
+            'account': unbanned?.toAdminSummaryJson(),
+          });
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/accounts/delete') {
+          final body = await _readJsonBody(req);
+          final deleted = accounts.cancelAndDeleteAccount(
+            (body['userId'] as String?) ?? '',
+          );
+          await _writeJson(req, HttpStatus.ok, {'deleted': deleted});
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/accounts/update') {
+          final body = await _readJsonBody(req);
+          final updated = accounts.updateAccountByAdmin(
+            userId: (body['userId'] as String?) ?? '',
+            cafeDinars: (body['cafeDinars'] as num?)?.toInt(),
+            rating: (body['rating'] as num?)?.toInt(),
+            isVip: body['isVip'] as bool?,
+          );
+          await _writeJson(req, HttpStatus.ok, {
+            'account': updated?.toAdminSummaryJson(),
+          });
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/rooms/close') {
+          final body = await _readJsonBody(req);
+          final code = (body['roomCode'] as String?) ?? '';
+          final room = _roomsByCode.remove(code);
+          if (room != null) await room.dispose();
+          await _writeJson(req, HttpStatus.ok, {'closed': room != null});
+          return;
+        }
+
+        if (req.method == 'GET' && path == '/api/admin/live-ops') {
+          await _writeJson(req, HttpStatus.ok, {
+            'events': [for (final e in liveOps.allEvents) e.toJson()],
+            'tournaments': [
+              for (final t in liveOps.allTournaments) t.toJson(),
+            ],
+          });
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/events/upsert') {
+          final body = await _readJsonBody(req);
+          final ev = CafeEventDefinition.fromJson(body);
+          liveOps.upsertEvent(ev);
+          await _writeJson(req, HttpStatus.ok, {'event': ev.toJson()});
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/events/delete') {
+          final body = await _readJsonBody(req);
+          final deleted = liveOps.deleteEvent((body['id'] as String?) ?? '');
+          await _writeJson(req, HttpStatus.ok, {'deleted': deleted});
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/tournaments/upsert') {
+          final body = await _readJsonBody(req);
+          final cup = CafeTournamentTier.fromJson(body);
+          liveOps.upsertTournament(cup);
+          await _writeJson(req, HttpStatus.ok, {'tournament': cup.toJson()});
+          return;
+        }
+
+        if (req.method == 'POST' && path == '/api/admin/tournaments/delete') {
+          final body = await _readJsonBody(req);
+          final deleted = liveOps.deleteTournament(
+            (body['id'] as String?) ?? '',
+          );
+          await _writeJson(req, HttpStatus.ok, {'deleted': deleted});
+          return;
+        }
       }
 
       await _writeJson(req, HttpStatus.notFound, {'error': 'Not found'});
@@ -214,6 +431,19 @@ class DominoOnlineServer {
     final ws = await WebSocketTransformer.upgrade(req);
     ws.pingInterval = const Duration(seconds: 15);
     final peerId = 'ws_${_nextPeerSeq++}';
+
+    // Reject banned or cancelled accounts from opening or joining online rooms:
+    final accessErr = accounts.checkPlayerAccessError(qp['playerId']);
+    if (accessErr != null) {
+      ws.add(
+        WireEnvelope(
+          type: WireEnvelope.tError,
+          data: {'message': accessErr},
+        ).encode(),
+      );
+      await ws.close(4003, accessErr);
+      return;
+    }
 
     if (mode == 'matchmaking') {
       final playerCount = (int.tryParse(qp['playerCount'] ?? '4') == 2) ? 2 : 4;
@@ -351,10 +581,20 @@ class DominoOnlineServer {
     return (1000 + _random.nextInt(9000)).toString();
   }
 
+  /// Reads JSON request body with a strict `2.5 MB` size cap to prevent memory
+  /// exhaustion while still allowing uploaded Base64 sponsor images from `/admin`.
   Future<Map<String, Object?>> _readJsonBody(HttpRequest req) async {
-    final text = await utf8.decoder.bind(req).join();
-    if (text.isEmpty) return const {};
-    final decoded = jsonDecode(text);
+    const maxBytes = 2621440; // 2.5 MB
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in req) {
+      if (builder.length + chunk.length > maxBytes) {
+        throw StateError('حجم البيانات المرسلة كبير جداً (الحد الأقصى 2.5MB)');
+      }
+      builder.add(chunk);
+    }
+    final bytes = builder.takeBytes();
+    if (bytes.isEmpty) return const {};
+    final decoded = jsonDecode(utf8.decode(bytes));
     return decoded is Map<String, Object?> ? decoded : const {};
   }
 

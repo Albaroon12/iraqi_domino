@@ -1,22 +1,35 @@
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/settings_provider.dart';
 
-/// Central audio service for game sound effects and Iraqi café ambience.
+/// Central audio & tactile haptics service for **المقهى** (`Al-Maqha`).
 ///
-/// Missing audio files in `assets/audio/` are safely ignored (and cached)
-/// so the app never crashes if an asset has not been added yet.
+/// Automatically prefers custom `.mp3` files in `assets/audio/` when present
+/// and falls back to bundled first-party `.wav` effects so every sound works
+/// out of the box without crashes.
 class SoundService {
   SoundService(this._ref);
 
   final Ref _ref;
 
-  static const String _cafeAmbientAsset = 'audio/cafe_ambient.mp3';
-  static const String _tilePlaceAsset = 'audio/tile_place.mp3';
-  static const String _tileDrawAsset = 'audio/tile_draw.mp3';
-  static const String _tilePassAsset = 'audio/tile_pass.mp3';
+  static const List<String> _cafeAmbientCandidates = [
+    'audio/cafe_ambient.mp3',
+    'audio/cafe_ambient.wav',
+  ];
+  static const List<String> _tilePlaceCandidates = [
+    'audio/tile_place.mp3',
+    'audio/tile_place.wav',
+  ];
+  static const List<String> _tileDrawCandidates = [
+    'audio/tile_draw.mp3',
+    'audio/tile_draw.wav',
+  ];
+  static const List<String> _tilePassCandidates = [
+    'audio/tile_pass.mp3',
+    'audio/tile_pass.wav',
+  ];
 
   AudioPlayer? _sfxPlayer;
   AudioPlayer? _ambientPlayer;
@@ -71,14 +84,30 @@ class SoundService {
     }
   }
 
-  Future<void> _playSfx(String assetPath) async {
+  Future<String?> _resolveFirstAvailable(List<String> candidates) async {
+    for (final path in candidates) {
+      if (await _hasAsset(path)) return path;
+    }
+    return null;
+  }
+
+  Future<void> _playSfxCandidates(
+    List<String> candidates, {
+    bool lightHaptic = false,
+  }) async {
     if (!_soundEnabled) return;
-    if (!await _hasAsset(assetPath)) return;
+    if (lightHaptic) {
+      try {
+        await HapticFeedback.lightImpact();
+      } catch (_) {}
+    }
+    final resolved = await _resolveFirstAvailable(candidates);
+    if (resolved == null) return;
     final player = _getSfxPlayer();
     if (player == null) return;
     try {
       await player.stop();
-      await player.play(AssetSource(assetPath), volume: 0.9);
+      await player.play(AssetSource(resolved), volume: 0.9);
     } catch (_) {
       // Ignore audio errors on unsupported/headless test environments.
     }
@@ -88,33 +117,35 @@ class SoundService {
   /// tile placement in a match has zero lookup latency.
   Future<void> warmUp() async {
     await Future.wait([
-      _hasAsset(_cafeAmbientAsset),
-      _hasAsset(_tilePlaceAsset),
-      _hasAsset(_tileDrawAsset),
-      _hasAsset(_tilePassAsset),
+      _resolveFirstAvailable(_cafeAmbientCandidates),
+      _resolveFirstAvailable(_tilePlaceCandidates),
+      _resolveFirstAvailable(_tileDrawCandidates),
+      _resolveFirstAvailable(_tilePassCandidates),
     ]);
   }
 
-  /// Plays the tile-placement clack sound.
-  Future<void> playTilePlace() => _playSfx(_tilePlaceAsset);
+  /// Plays the tile-placement clack sound + subtle tactile impact.
+  Future<void> playTilePlace() =>
+      _playSfxCandidates(_tilePlaceCandidates, lightHaptic: true);
 
   /// Plays the boneyard draw sound.
-  Future<void> playTileDraw() => _playSfx(_tileDrawAsset);
+  Future<void> playTileDraw() => _playSfxCandidates(_tileDrawCandidates);
 
   /// Plays the pass ("تعبّر / ما عندي") sound.
-  Future<void> playPass() => _playSfx(_tilePassAsset);
+  Future<void> playPass() => _playSfxCandidates(_tilePassCandidates);
 
   /// Starts looping the Iraqi café ambience if enabled in settings.
   Future<void> startCafeAmbient() async {
     _ambientRequested = true;
     if (!_ambientEnabled) return;
-    if (!await _hasAsset(_cafeAmbientAsset)) return;
+    final resolved = await _resolveFirstAvailable(_cafeAmbientCandidates);
+    if (resolved == null) return;
     final player = _getAmbientPlayer();
     if (player == null) return;
     try {
       await player.setReleaseMode(ReleaseMode.loop);
-      await player.setVolume(0.25);
-      await player.play(AssetSource(_cafeAmbientAsset));
+      await player.setVolume(0.22);
+      await player.play(AssetSource(resolved));
     } catch (_) {}
   }
 
@@ -130,7 +161,8 @@ class SoundService {
     if (!_ambientRequested || !_ambientEnabled) {
       return;
     }
-    if (!await _hasAsset(_cafeAmbientAsset)) return;
+    final resolved = await _resolveFirstAvailable(_cafeAmbientCandidates);
+    if (resolved == null) return;
     try {
       await _ambientPlayer?.resume();
     } catch (_) {}

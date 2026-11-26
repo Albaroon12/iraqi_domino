@@ -20,7 +20,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
 
     <application
-        android:label="iraqi_domino"
+        android:label="المقهى"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

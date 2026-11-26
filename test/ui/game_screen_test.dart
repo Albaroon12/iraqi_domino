@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iraqi_domino/core/network/connectivity_provider.dart';
 import 'package:iraqi_domino/ui/widgets/player_chip.dart';
 
 import '../helpers/test_app.dart';
@@ -66,6 +68,36 @@ void main() {
     expect(find.text('شبكة الواي فاي (Wi-Fi)'), findsOneWidget);
     expect(find.text('إدخال رقم الغرفة'), findsOneWidget);
     expect(find.textContaining('الغرف المتاحة'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Offline mode hides online features and shows only Vs AI and Local Play', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(await buildTestApp());
+    await tester.pumpAndSettle();
+
+    // Switch connectivity to Offline:
+    final scope = ProviderScope.containerOf(
+      tester.element(find.byType(Directionality).first),
+    );
+    scope.read(connectivityProvider.notifier).setOnlineStatus(false);
+    await tester.pumpAndSettle();
+
+    // Main screen enters Offline-Only Café view (Shop/Tournaments bottom tabs hidden):
+    expect(find.text('وضع بدون إنترنت'), findsOneWidget);
+    expect(find.text('السوق'), findsNothing);
+
+    // Open 4-player ModeHubScreen while offline -> ONLY Vs AI & Local Play appear!
+    await tester.tap(find.text('أربعة لاعبين'));
+    await tester.pumpAndSettle();
+    expect(find.text('ضد الكمبيوتر'), findsOneWidget);
+    expect(find.text('اللعب المحلي'), findsOneWidget);
+    expect(find.text('لعب عشوائي (أونلاين)'), findsNothing);
+    expect(find.text('غرفة أصدقاء (أونلاين)'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
   });

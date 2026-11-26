@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kReleaseMode;
@@ -7,6 +8,11 @@ import 'package:material_ui/material_ui.dart';
 import '../../ai/ai_persona.dart';
 import '../../core/audio/sound_service.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/maqha_design_system.dart';
+import '../../data/cafe_events_and_tournaments.dart';
+import '../../data/cafe_shop_catalog.dart';
+import '../../data/game_data_center.dart';
+import '../../data/player_account.dart';
 import '../../engine/board.dart';
 import '../../engine/domino_piece.dart';
 import '../../engine/game_rules_config.dart';
@@ -15,6 +21,7 @@ import '../../engine/round_result.dart';
 import '../../engine/round_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../rendering/board_frame.dart';
+import '../../rendering/board_theme.dart';
 import '../../rendering/board_view.dart';
 import '../../rendering/domino_back.dart';
 import '../../rendering/domino_tile.dart';
@@ -23,6 +30,7 @@ import '../../rendering/tile_skin.dart';
 import '../../state/match_controller.dart';
 import '../../state/multiplayer_session_controller.dart';
 import '../../state/settings_provider.dart';
+import '../widgets/cafe_prop_widget.dart';
 import '../widgets/game_button.dart';
 import '../widgets/player_chip.dart';
 
@@ -42,11 +50,13 @@ class GameScreen extends ConsumerStatefulWidget {
     required this.playerCount,
     required this.rules,
     this.isMultiplayer = false,
+    this.activeTournament,
   }) : assert(playerCount == 2 || playerCount == 4);
 
   final int playerCount;
   final GameRulesConfig rules;
   final bool isMultiplayer;
+  final CafeTournamentTier? activeTournament;
 
   @override
   ConsumerState<GameScreen> createState() => _GameScreenState();
@@ -80,6 +90,9 @@ class _GameScreenState extends ConsumerState<GameScreen>
   BoardEnd? _hoverEnd;
   double _lastHandTileWidth = 36;
   bool _dialogOpen = false;
+  bool _tournamentSettled = false;
+  String? _cafeCalloutBubble;
+  Timer? _calloutTimer;
 
   late final SoundService _sound;
 
@@ -104,6 +117,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   @override
   void dispose() {
+    _calloutTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _sound.stopCafeAmbient();
     for (final (entry, controller) in _activeFlights) {
@@ -164,19 +178,29 @@ class _GameScreenState extends ConsumerState<GameScreen>
     if (!match.isMatchOver || _dialogOpen) return;
     _dialogOpen = true;
 
+    final weWon = match.matchWinnerTeam == 0;
+    final cup = widget.activeTournament;
+    if (cup != null && !_tournamentSettled) {
+      _tournamentSettled = true;
+      ref
+          .read(gameDataCenterProvider.notifier)
+          .completeTournamentMatch(tier: cup, won: weWon);
+    }
+
     try {
       final playAgain = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (_) => _MatchResultDialog(
-          weWon: match.matchWinnerTeam == 0,
+          weWon: weWon,
           ourTotal: match.scores[0],
           theirTotal: match.scores[1],
           targetScore: widget.rules.targetScore,
+          activeTournament: cup,
         ),
       );
       if (!mounted) return;
-      if (playAgain == true) {
+      if (playAgain == true && cup == null) {
         setState(_clearInteraction);
         _dispatchResetMatch();
       } else {
@@ -576,12 +600,67 @@ class _GameScreenState extends ConsumerState<GameScreen>
     );
   }
 
+  void _showCafeCallout(String text) {
+    _calloutTimer?.cancel();
+    setState(() => _cafeCalloutBubble = text);
+    _calloutTimer = Timer(const Duration(milliseconds: 2200), () {
+      if (mounted) setState(() => _cafeCalloutBubble = null);
+    });
+  }
+
+  Future<void> _openSheikhPhrasePicker(bool isAr) async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: MaqhaColors.cardCharcoal,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                isAr ? 'عبارات شيوخ المقهى' : 'Sheikh Table Callouts',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.gold,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final p in CafeShopCatalog.sheikhQuickPhrases)
+                ListTile(
+                  dense: true,
+                  title: Text(
+                    isAr ? p.ar : p.en,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppColors.ivory,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onTap: () => Navigator.of(ctx).pop(isAr ? p.ar : p.en),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (chosen != null) _showCafeCallout(chosen);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final settings = ref.watch(settingsProvider);
+    final account = ref.watch(gameDataCenterProvider);
     final skin = TileSkin.byId(settings.tileSkinId);
+    final boardTheme = BoardTheme.byId(account.effectiveTableId());
 
     final MatchViewState match;
     if (widget.isMultiplayer) {
@@ -642,13 +721,46 @@ class _GameScreenState extends ConsumerState<GameScreen>
       child: Scaffold(
       appBar: AppBar(
         toolbarHeight: 40,
-        title: Text(
-          _four ? l10n.modeFourPlayers : l10n.modeTwoPlayers,
-          style: const TextStyle(fontSize: 16),
-        ),
+        title: widget.activeTournament != null
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    color: AppColors.gold,
+                    size: 17,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      widget.activeTournament!.title(isAr),
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                _four ? l10n.modeFourPlayers : l10n.modeTwoPlayers,
+                style: const TextStyle(fontSize: 15),
+              ),
         actions: [
-          // Developer shortcut: hidden in release builds and multiplayer.
-          if (!kReleaseMode && !widget.isMultiplayer)
+          if (widget.activeTournament != null)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: Center(
+                child: CafeDinarPill(
+                  amount: widget.activeTournament!.netPrizeDinars,
+                  isAr: isAr,
+                  compact: true,
+                  showCurrencyWord: false,
+                ),
+              ),
+            ),
+          // Developer shortcut: hidden in release builds, multiplayer, and staked tournaments.
+          if (!kReleaseMode &&
+              !widget.isMultiplayer &&
+              widget.activeTournament == null)
             IconButton(
               icon: const Icon(Icons.refresh, size: 20),
               padding: EdgeInsets.zero,
@@ -660,16 +772,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       ),
       body: DecoratedBox(
         decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.1),
-            radius: 1.05,
-            colors: [
-              Color(0xFF281810),
-              Color(0xFF170E09),
-              Color(0xFF0C0704),
-            ],
-            stops: [0.0, 0.55, 1.0],
-          ),
+          gradient: MaqhaGradients.screenCanvas,
         ),
         child: SafeArea(
           left: false,
@@ -677,8 +780,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
           bottom: false,
           child: Column(
             children: [
-              Expanded(child: _buildTableArea(l10n, isAr, skin, match)),
-              _buildBottomArea(l10n, isAr, skin, match),
+              Expanded(
+                child: _buildTableArea(l10n, isAr, skin, boardTheme, match),
+              ),
+              _buildBottomArea(l10n, isAr, skin, account, match),
             ],
           ),
         ),
@@ -696,6 +801,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     AppLocalizations l10n,
     bool isAr,
     TileSkin skin,
+    BoardTheme boardTheme,
     MatchViewState match,
   ) {
     final topCount = match.hands[_topSeat].length;
@@ -777,7 +883,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
               top: top,
               width: boardWidth,
               height: boardHeight,
-              child: _buildBoardZone(l10n, isAr, skin, match),
+              child: _buildBoardZone(l10n, isAr, skin, boardTheme, match),
             ),
 
             // Side players (4 players only), anchored to the left and right
@@ -868,9 +974,11 @@ class _GameScreenState extends ConsumerState<GameScreen>
     AppLocalizations l10n,
     bool isAr,
     TileSkin skin,
+    BoardTheme boardTheme,
     MatchViewState match,
   ) {
     return BoardFrame(
+      theme: boardTheme,
       child: Stack(
         children: [
           Positioned.fill(
@@ -900,6 +1008,35 @@ class _GameScreenState extends ConsumerState<GameScreen>
                 child: _RoundTallyBadge(
                   result: match.roundResult!,
                   fourPlayers: _four,
+                ),
+              ),
+            ),
+          if (_cafeCalloutBubble != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: match.status != null ? 38 : 10,
+              child: Center(
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: MaqhaColors.cardCharcoal,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppColors.gold),
+                    ),
+                    child: Text(
+                      _cafeCalloutBubble!,
+                      style: const TextStyle(
+                        color: AppColors.gold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -970,6 +1107,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
     AppLocalizations l10n,
     bool isAr,
     TileSkin skin,
+    PlayerAccount account,
     MatchViewState match,
   ) {
     final myHand = [...match.hands[0]]..sort();
@@ -993,13 +1131,13 @@ class _GameScreenState extends ConsumerState<GameScreen>
         gradient: const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF21130C), Color(0xFF110905)],
+          colors: [MaqhaColors.navDockGlass, Color(0xFF0E1818)],
         ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-        border: Border(
+        border: const Border(
           top: BorderSide(
-            color: AppColors.gold.withValues(alpha: 0.4),
-            width: 1.2,
+            color: MaqhaColors.borderSubtle,
+            width: 1.1,
           ),
         ),
         boxShadow: const [
@@ -1047,12 +1185,15 @@ class _GameScreenState extends ConsumerState<GameScreen>
                         gradient: const LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [Color(0xFF2B190E), Color(0xFF170D07)],
+                          colors: [
+                            MaqhaColors.cardCharcoalElevated,
+                            MaqhaColors.cardCharcoal,
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: AppColors.gold.withValues(alpha: 0.5),
-                          width: 1.2,
+                          color: AppColors.gold.withValues(alpha: 0.4),
+                          width: 1.1,
                         ),
                         boxShadow: const [
                           BoxShadow(
@@ -1158,6 +1299,10 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   name: l10n.playerYou,
                   tileCount: myHand.length,
                   isTurn: myTurn,
+                  humanPersona:
+                      AiPersona.all[account.avatarIndex % AiPersona.all.length],
+                  avatarFrameId: account.effectiveFrameId(),
+                  showBotBadge: false,
                   secondsLeft: timerOn ? match.secondsLeft : null,
                   secondsTotal: match.turnSeconds,
                   compact: compactBottom,
@@ -1168,6 +1313,44 @@ class _GameScreenState extends ConsumerState<GameScreen>
                   target: widget.rules.targetScore,
                   compact: compactBottom,
                 ),
+                const SizedBox(width: 8),
+                CafePropWidget(
+                  propId: account.effectiveCafePropId(),
+                  size: compactBottom ? 28 : 34,
+                  onTap: () {
+                    final propTitle =
+                        CafeShopCatalog.byId(
+                          account.effectiveCafePropId(),
+                        )?.title(isAr) ??
+                        (isAr ? 'ضيافة المقهى' : 'Café Treat');
+                    _showCafeCallout(
+                      isAr
+                          ? '${account.displayName}: $propTitle'
+                          : '${account.displayName}: $propTitle',
+                    );
+                  },
+                ),
+                if (account.hasLuxuryQuickChat()) ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => _openSheikhPhrasePicker(isAr),
+                    child: Container(
+                      width: compactBottom ? 26 : 30,
+                      height: compactBottom ? 26 : 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.gold.withValues(alpha: 0.18),
+                        border: Border.all(color: AppColors.gold),
+                      ),
+                      child: Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        color: AppColors.gold,
+                        size: compactBottom ? 14 : 16,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1402,9 +1585,9 @@ class _BoardPlaceholder extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 240),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xCC1D110A),
+        color: MaqhaColors.cardCharcoal.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+        border: Border.all(color: MaqhaColors.borderSubtle),
       ),
       child: Text(
         message,
@@ -1428,9 +1611,9 @@ class _StatusPill extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 220),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xDD1D110A),
+        color: MaqhaColors.cardCharcoal,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.6)),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.55)),
       ),
       child: Text(
         text,
@@ -1477,7 +1660,7 @@ class _PlayerScoreBadge extends StatelessWidget {
         vertical: compact ? 3 : 4,
       ),
       decoration: BoxDecoration(
-        color: compact ? const Color(0xE6120905) : const Color(0xCC1D110A),
+        color: MaqhaColors.cardCharcoal,
         borderRadius: radius,
         border: Border(
           top: side,
@@ -1588,7 +1771,7 @@ class _TileRack extends StatelessWidget {
         vertical ? 5 : 4,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xCC120A06),
+        color: MaqhaColors.cardCharcoal.withValues(alpha: 0.88),
         borderRadius: radius,
         border: Border(
           top: side,
@@ -1651,7 +1834,7 @@ class _BoneyardDrawBoard extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xF26B4528), Color(0xF52C190C)],
+            colors: [MaqhaColors.bgSoftTeal, MaqhaColors.cardCharcoal],
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -1752,7 +1935,7 @@ class _RoundTallyBadge extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xEE3A2515), Color(0xEE1D110A)],
+            colors: [MaqhaColors.cardCharcoalElevated, MaqhaColors.cardCharcoal],
           ),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
@@ -1813,9 +1996,9 @@ class _TopInfoPill extends StatelessWidget {
         vertical: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xCC1D110A),
+        color: MaqhaColors.cardCharcoal,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+        border: Border.all(color: MaqhaColors.borderSubtle),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1874,7 +2057,7 @@ class _RoundHistoryDialog extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF3A2515), Color(0xFF1D110A)],
+            colors: [MaqhaColors.cardCharcoalElevated, MaqhaColors.cardCharcoal],
           ),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.gold.withValues(alpha: 0.6)),
@@ -1974,16 +2157,20 @@ class _MatchResultDialog extends StatelessWidget {
     required this.ourTotal,
     required this.theirTotal,
     required this.targetScore,
+    this.activeTournament,
   });
 
   final bool weWon;
   final int ourTotal;
   final int theirTotal;
   final int targetScore;
+  final CafeTournamentTier? activeTournament;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final cup = activeTournament;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -1993,7 +2180,7 @@ class _MatchResultDialog extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF3A2515), Color(0xFF1D110A)],
+            colors: [MaqhaColors.cardCharcoalElevated, MaqhaColors.cardCharcoal],
           ),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.gold.withValues(alpha: 0.7)),
@@ -2010,7 +2197,11 @@ class _MatchResultDialog extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              weWon ? l10n.weWonRound : l10n.theyWonRound,
+              cup != null
+                  ? (weWon
+                        ? (isAr ? 'تُوجت بكأس البطولة' : 'Tournament Champion')
+                        : (isAr ? 'انتهت رحلة البطولة' : 'Tournament Ended'))
+                  : (weWon ? l10n.weWonRound : l10n.theyWonRound),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: AppColors.gold,
@@ -2035,20 +2226,50 @@ class _MatchResultDialog extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: GameButton(
-                label: l10n.play,
-                primary: true,
-                onPressed: () => Navigator.of(context).pop(true),
+            if (cup != null && weWon) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.gold.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.gold),
+                ),
+                child: Text(
+                  isAr
+                      ? 'الجائزة الصافية: +${cup.netPrizeDinars} دينار المقهى  •  +${cup.bonusXpForWinner} XP'
+                      : 'Net Prize: +${cup.netPrizeDinars} Dinars  •  +${cup.bonusXpForWinner} XP',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.gold,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+            ],
+            const SizedBox(height: 22),
+            if (cup == null) ...[
+              SizedBox(
+                width: double.infinity,
+                child: GameButton(
+                  label: l10n.play,
+                  primary: true,
+                  onPressed: () => Navigator.of(context).pop(true),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               width: double.infinity,
               child: GameButton(
-                label: l10n.chooseMode,
+                label: cup != null
+                    ? (isAr ? 'العودة لقاعة البطولات' : 'Back to Tournaments')
+                    : l10n.chooseMode,
+                primary: cup != null,
                 onPressed: () => Navigator.of(context).pop(false),
               ),
             ),

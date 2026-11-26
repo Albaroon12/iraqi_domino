@@ -2,7 +2,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../ai/ai_persona.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/maqha_design_system.dart';
 import 'ai_persona_avatar.dart';
+import 'cafe_avatar_frame.dart';
 
 /// Compact player marker: a small avatar with a tile-count badge and the
 /// name below it. The avatar glows gold when it is the player's turn.
@@ -16,6 +18,9 @@ class PlayerChip extends StatelessWidget {
     required this.tileCount,
     required this.isTurn,
     this.aiPersona,
+    this.humanPersona,
+    this.avatarFrameId = 'frame_none',
+    this.showBotBadge = true,
     this.icon = Icons.person_rounded,
     this.secondsLeft,
     this.secondsTotal = 30,
@@ -26,6 +31,9 @@ class PlayerChip extends StatelessWidget {
   final int tileCount;
   final bool isTurn;
   final AiPersona? aiPersona;
+  final AiPersona? humanPersona;
+  final String avatarFrameId;
+  final bool showBotBadge;
   final IconData icon;
   final int? secondsLeft;
   final int secondsTotal;
@@ -38,58 +46,77 @@ class PlayerChip extends StatelessWidget {
     const urgentColor = Color(0xFFE5533D);
     final avatarSize = compact ? 28.0 : 34.0;
     final badgeSize = compact ? 15.0 : 17.0;
-    final persona = aiPersona;
+    final persona = aiPersona ?? humanPersona;
+    final isBot = aiPersona != null && showBotBadge;
+    final hasCustomFrame = avatarFrameId != 'frame_none' && !urgent;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Stack(
           clipBehavior: Clip.none,
+          alignment: Alignment.center,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              width: avatarSize,
-              height: avatarSize,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF4A3020),
-                border: Border.all(
-                  color: isTurn
-                      ? AppColors.gold
-                      : AppColors.gold.withValues(alpha: 0.35),
-                  width: isTurn ? 2.5 : 1.5,
-                ),
-                boxShadow: isTurn
-                    ? [
-                        BoxShadow(
-                          color: AppColors.gold.withValues(alpha: 0.6),
-                          blurRadius: 12,
+            if (hasCustomFrame)
+              CafeAvatarFrame(
+                frameId: avatarFrameId,
+                size: avatarSize - 2,
+                child: persona != null
+                    ? AiPersonaAvatar(persona: persona, size: avatarSize - 2)
+                    : ColoredBox(
+                        color: MaqhaColors.avatarJade,
+                        child: Icon(
+                          icon,
+                          size: compact ? 16 : 20,
+                          color: AppColors.ivory,
                         ),
-                      ]
-                    : const [],
-              ),
-              child: urgent
-                  ? Text(
-                      '$left',
-                      style: TextStyle(
-                        color: urgentColor,
-                        fontSize: compact ? 13 : 15,
-                        fontWeight: FontWeight.w800,
-                        height: 1,
                       ),
-                    )
-                  : (persona != null
-                        ? AiPersonaAvatar(
-                            persona: persona,
-                            size: avatarSize - 4,
-                          )
-                        : Icon(
-                            icon,
-                            size: compact ? 16 : 20,
-                            color: AppColors.ivory,
-                          )),
-            ),
+              )
+            else
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: avatarSize,
+                height: avatarSize,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: MaqhaColors.avatarJade,
+                  border: Border.all(
+                    color: isTurn
+                        ? AppColors.gold
+                        : AppColors.gold.withValues(alpha: 0.35),
+                    width: isTurn ? 2.5 : 1.5,
+                  ),
+                  boxShadow: isTurn
+                      ? [
+                          BoxShadow(
+                            color: AppColors.gold.withValues(alpha: 0.6),
+                            blurRadius: 12,
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: urgent
+                    ? Text(
+                        '$left',
+                        style: TextStyle(
+                          color: urgentColor,
+                          fontSize: compact ? 13 : 15,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      )
+                    : (persona != null
+                          ? AiPersonaAvatar(
+                              persona: persona,
+                              size: avatarSize - 4,
+                            )
+                          : Icon(
+                              icon,
+                              size: compact ? 16 : 20,
+                              color: AppColors.ivory,
+                            )),
+              ),
             // Turn timer ring.
             if (left != null)
               Positioned(
@@ -112,7 +139,7 @@ class PlayerChip extends StatelessWidget {
                 ),
               ),
             // AI bot badge on top-left when controlled by an AiPersona.
-            if (persona != null)
+            if (isBot)
               Positioned(
                 left: compact ? -6 : -7,
                 top: -3,
@@ -174,8 +201,9 @@ class PlayerChip extends StatelessWidget {
             vertical: 2,
           ),
           decoration: BoxDecoration(
-            color: const Color(0xE6120905),
+            color: MaqhaColors.cardCharcoal,
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: MaqhaColors.borderSubtle, width: 0.8),
           ),
           // Long names shrink instead of overflowing.
           child: FittedBox(

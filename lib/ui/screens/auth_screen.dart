@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/maqha_design_system.dart';
 import '../../data/game_data_center.dart';
 import '../../rendering/domino_tile.dart';
 import '../../rendering/tile_skin.dart';
@@ -11,14 +12,13 @@ import '../widgets/game_button.dart';
 import '../widgets/game_loading_overlay.dart';
 import 'app_shell_screen.dart';
 
-/// Account gateway screen supporting:
-/// 1. Sign-In with existing account (`تسجيل الدخول`)
-/// 2. Create a new account & link guest progress (`إنشاء حساب جديد`)
-/// 3. Instant 1-tap Guest entry (`المتابعة كضيف`)
-///
-/// Can be shown on first app launch after [SplashScreen] or opened from the
-/// Profile tab (`[popOnComplete] = true`) when a Guest wants to link/upgrade
-/// their account without losing their match stats.
+/// Account gateway screen for **المقهى** (`Al-Maqha`) supporting:
+/// 1. **تسجيل الدخول (`Sign In`)** & **إنشاء حساب جديد (`Create Account`)**
+/// 2. **3 Authentication Methods**:
+///    - **البريد الإلكتروني وكلمة السر (`Email & Password`)** — active
+///    - **حساب Google (`Google Account / Gmail on phone`)** — active
+///    - **رقم الهاتف (`Phone Number`)** — visible & marked disabled (`غير مفعل`)
+/// 3. **المتابعة كضيف (`Continue as Guest`)**
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key, this.popOnComplete = false});
 
@@ -67,7 +67,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
-  Future<void> _submitAuth() async {
+  Future<void> _submitEmailAuth() async {
     setState(() {
       _loading = true;
       _error = null;
@@ -87,6 +87,83 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           password: _passwordCtrl.text,
         );
       }
+      _finishNavigation();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e
+            .toString()
+            .replaceFirst('Invalid argument(s): ', '')
+            .replaceFirst('Bad state: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _submitGoogleAccountAuth(bool isAr) async {
+    final initialMail = _emailCtrl.text.trim().contains('@')
+        ? _emailCtrl.text.trim()
+        : '';
+    final mailCtrl = TextEditingController(text: initialMail);
+    final chosenEmail = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: MaqhaColors.cardCharcoal,
+        title: Row(
+          children: [
+            const _GoogleGlyphIcon(size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isAr
+                    ? 'اختر حساب Google على الهاتف'
+                    : 'Choose Google Account',
+                style: const TextStyle(color: AppColors.gold, fontSize: 15.5),
+              ),
+            ),
+          ],
+        ),
+        content: TextField(
+          controller: mailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.ivory),
+          decoration: InputDecoration(
+            hintText: isAr ? 'example@gmail.com' : 'example@gmail.com',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(mailCtrl.text.trim()),
+            child: Text(
+              isAr ? 'متابعة بحساب Google' : 'Continue',
+              style: const TextStyle(
+                color: AppColors.gold,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    mailCtrl.dispose();
+    if (chosenEmail == null || chosenEmail.isEmpty) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await ref.read(gameDataCenterProvider.notifier).signInWithGoogle(
+            googleEmail: chosenEmail,
+            displayNameOverride: _nameCtrl.text.trim(),
+          );
       _finishNavigation();
     } catch (e) {
       if (!mounted) return;
@@ -129,36 +206,35 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         visible: _loading,
         title: isAr ? 'جارٍ توثيق الحساب...' : 'Verifying Account...',
         subtitle: isAr
-            ? 'يتم حفظ ومزامنة بياناتك في مركز البيانات'
-            : 'Syncing your profile with the Data Center',
+            ? 'يتم حفظ ومزامنة بياناتك في مركز بيانات المقهى'
+            : 'Syncing your profile with Al-Maqha Data Center',
         child: WoodTable(
           child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
-                  vertical: 16,
+                  vertical: 14,
                 ),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 370),
+                  constraints: const BoxConstraints(maxWidth: 380),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Header emblem
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           DominoTile(
                             top: 6,
                             bottom: 6,
-                            width: 30,
+                            width: 28,
                             skin: skin,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Text(
-                        isAr ? 'الدومينو العراقي' : 'Iraqi Domino',
+                        isAr ? 'المقهى' : 'Al-Maqha',
                         style: const TextStyle(
                           color: AppColors.gold,
                           fontSize: 24,
@@ -167,38 +243,33 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isAr
-                            ? 'سجّل دخولك لحفظ نقاطك أو العب فوراً كضيف'
-                            : 'Sign in to save your progress or play as Guest',
+                        isAr ? 'تسجيل الدخول وحفظ التقدم' : 'Sign in & save progress',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.ivory.withValues(alpha: 0.72),
+                        style: const TextStyle(
+                          color: MaqhaColors.textMuted,
                           fontSize: 12.5,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
 
-                      // Auth Card
+                      // Main Auth Card (Login vs Register + 3 Provider Options)
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(15),
                         decoration: BoxDecoration(
-                          color: const Color(0xDD1D110A),
+                          color: MaqhaColors.cardCharcoal,
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: AppColors.gold.withValues(alpha: 0.45),
-                          ),
+                          border: Border.all(color: MaqhaColors.borderSubtle),
+                          boxShadow: MaqhaShadows.cardShadow,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Mode Switcher: Login vs Register
+                            // 1. Mode Switcher: Sign In vs Create Account
                             Row(
                               children: [
                                 Expanded(
                                   child: _AuthTabChip(
-                                    label: isAr
-                                        ? 'تسجيل الدخول'
-                                        : 'Sign In',
+                                    label: isAr ? 'تسجيل الدخول' : 'Sign In',
                                     selected: _mode == _AuthMode.login,
                                     onTap: () => setState(() {
                                       _mode = _AuthMode.login;
@@ -221,7 +292,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
 
                             if (_error != null) ...[
                               Container(
@@ -244,6 +315,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               const SizedBox(height: 12),
                             ],
 
+                            // 2. Method A: Email & Password
                             if (_mode == _AuthMode.register) ...[
                               TextField(
                                 controller: _nameCtrl,
@@ -259,11 +331,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                     size: 20,
                                   ),
                                   hintText: isAr
-                                      ? 'اسم اللاعب في الطاولة'
+                                      ? 'اسم اللاعب في المقهى'
                                       : 'Display Name',
                                 ),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 9),
                             ],
 
                             TextField(
@@ -285,7 +357,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                     : 'Email Address',
                               ),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 9),
 
                             TextField(
                               controller: _passwordCtrl,
@@ -306,7 +378,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                     : 'Password (6+ chars)',
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
 
                             if (account.stats.matchesPlayed > 0 &&
                                 account.isGuest)
@@ -314,8 +386,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: Text(
                                   isAr
-                                      ? '✓ سيتم نقل إحصائياتك الحالية (${account.stats.matchesWon} فوز • تقييم ${account.rating}) إلى حسابك تلقائياً.'
-                                      : '✓ Your current Guest stats (${account.stats.matchesWon} wins) will be linked automatically.',
+                                      ? '✓ سيتم ربط إحصائياتك ودنانيرك الحالية (${account.cafeDinars} د) بحسابك تلقائياً.'
+                                      : '✓ Your Guest stats & Dinars will be linked automatically.',
                                   style: const TextStyle(
                                     color: Color(0xFF81C784),
                                     fontSize: 11.5,
@@ -325,27 +397,104 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
                             GameButton(
                               label: _mode == _AuthMode.login
-                                  ? (isAr ? 'دخول للحساب' : 'Sign In')
+                                  ? (isAr
+                                        ? 'دخول بالبريد الإلكتروني'
+                                        : 'Sign In with Email')
                                   : (isAr
                                         ? 'إنشاء وربط الحساب'
                                         : 'Create & Link Account'),
                               icon: Icons.verified_user_outlined,
                               primary: true,
-                              onPressed: _loading ? null : _submitAuth,
+                              onPressed: _loading ? null : _submitEmailAuth,
+                            ),
+
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Divider(
+                                    color: AppColors.gold.withValues(
+                                      alpha: 0.22,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  child: Text(
+                                    isAr
+                                        ? 'أو المتابعة السريعة عبر'
+                                        : 'Or continue via',
+                                    style: TextStyle(
+                                      color: AppColors.ivory.withValues(
+                                        alpha: 0.65,
+                                      ),
+                                      fontSize: 11.5,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Divider(
+                                    color: AppColors.gold.withValues(
+                                      alpha: 0.22,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+
+                            // 3. Method B: Google Account on Phone (Active!)
+                            _ProviderOptionTile(
+                              customLeading: const _GoogleGlyphIcon(size: 20),
+                              icon: Icons.mail_outline_rounded,
+                              accentColor: const Color(0xFF4285F4),
+                              title: _mode == _AuthMode.login
+                                  ? (isAr
+                                        ? 'تسجيل الدخول باستخدام Google'
+                                        : 'Sign In with Google')
+                                  : (isAr
+                                        ? 'التسجيل باستخدام حساب Google'
+                                        : 'Sign Up with Google'),
+                              subtitle: isAr
+                                  ? 'عبر حساب Google في الهاتف'
+                                  : 'Google account on phone',
+                              enabled: !_loading,
+                              onTap: () => _submitGoogleAccountAuth(isAr),
+                            ),
+                            const SizedBox(height: 8),
+
+                            // 4. Method C: Phone Number (Visible, Currently Disabled!)
+                            _ProviderOptionTile(
+                              icon: Icons.phone_iphone_rounded,
+                              accentColor: AppColors.ivory.withValues(
+                                alpha: 0.45,
+                              ),
+                              title: _mode == _AuthMode.login
+                                  ? (isAr
+                                        ? 'الدخول عن طريق رقم الهاتف'
+                                        : 'Sign In with Phone Number')
+                                  : (isAr
+                                        ? 'التسجيل عن طريق رقم الهاتف'
+                                        : 'Register with Phone Number'),
+                              subtitle: isAr
+                                  ? 'يتوفر قريباً'
+                                  : 'Coming soon',
+                              badgeText: isAr ? 'غير مفعل' : 'Disabled',
+                              enabled: false,
+                              onTap: null,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
 
                       // Play as Guest Button
                       SizedBox(
                         width: double.infinity,
                         child: GameButton(
                           label: isAr ? 'المتابعة كضيف' : 'Continue as Guest',
-                          subtitle: isAr
-                              ? 'دخول فوري بدون حساب (${account.displayName})'
-                              : 'Instant play without registration (${account.displayName})',
                           icon: Icons.play_circle_outline_rounded,
                           onPressed: _loading ? null : _enterAsGuest,
                         ),
@@ -355,6 +504,144 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderOptionTile extends StatelessWidget {
+  const _ProviderOptionTile({
+    required this.icon,
+    required this.accentColor,
+    required this.title,
+    required this.subtitle,
+    required this.enabled,
+    required this.onTap,
+    this.customLeading,
+    this.badgeText,
+  });
+
+  final IconData icon;
+  final Color accentColor;
+  final String title;
+  final String subtitle;
+  final bool enabled;
+  final VoidCallback? onTap;
+  final Widget? customLeading;
+  final String? badgeText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.56,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: MaqhaColors.bgDeepTeal.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: enabled
+                  ? accentColor.withValues(alpha: 0.55)
+                  : MaqhaColors.borderSubtle,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: customLeading != null
+                      ? Colors.white
+                      : accentColor.withValues(alpha: 0.16),
+                ),
+                child:
+                    customLeading ?? Icon(icon, color: accentColor, size: 19),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppColors.ivory,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: AppColors.ivory.withValues(alpha: 0.68),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (badgeText != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0x66000000),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: AppColors.ivory.withValues(alpha: 0.28),
+                    ),
+                  ),
+                  child: Text(
+                    badgeText!,
+                    style: TextStyle(
+                      color: AppColors.ivory.withValues(alpha: 0.78),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: accentColor,
+                  size: 14,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleGlyphIcon extends StatelessWidget {
+  const _GoogleGlyphIcon({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Center(
+        child: Text(
+          'G',
+          style: TextStyle(
+            color: const Color(0xFF4285F4),
+            fontSize: size * 0.82,
+            fontWeight: FontWeight.w900,
+            height: 1,
           ),
         ),
       ),

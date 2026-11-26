@@ -15,7 +15,12 @@ import 'peer_transport.dart';
 class OnlineServerManager {
   OnlineServerManager._();
 
-  static String _baseUrl = 'http://127.0.0.1:8080';
+  static const String _compiledDefaultUrl = String.fromEnvironment(
+    'MAQHA_SERVER_URL',
+    defaultValue: 'http://127.0.0.1:8080',
+  );
+
+  static String _baseUrl = _compiledDefaultUrl;
   static DominoOnlineServer? _embeddedServer;
 
   static String get baseUrl => _baseUrl;

@@ -220,9 +220,9 @@ class _RoomLobbyScreenState extends ConsumerState<RoomLobbyScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xDD1D110A),
+        color: AppColors.surfaceCharcoal,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.55)),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Column(
         children: [
@@ -461,14 +461,15 @@ class _SeatCard extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: EdgeInsets.all(compact ? 10 : 12),
         decoration: BoxDecoration(
-          color: isMe ? const Color(0xEE2B1B10) : const Color(0xCC1A0F09),
+          color: isMe
+              ? AppColors.gold.withValues(alpha: 0.14)
+              : AppColors.surfaceCharcoal,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isMe
                 ? AppColors.gold
-                : (teamColor?.withValues(alpha: 0.55) ??
-                      AppColors.gold.withValues(alpha: 0.3)),
-            width: isMe ? 1.8 : 1.1,
+                : (teamColor?.withValues(alpha: 0.5) ?? AppColors.borderSubtle),
+            width: isMe ? 1.6 : 1.0,
           ),
         ),
         child: Column(

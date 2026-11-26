@@ -1,72 +1,15 @@
-# Architecture — Iraqi Domino
-Status: DRAFT v0.1
+# Architecture — المقهى (`Al-Maqha`)
+Status: v1.0 Release Ready
 
 ## Layers
-1. engine/ (pure Dart, no Flutter imports)
-   - tile, deck, dealing (2-2-3), board, move validation, turn manager,
-     round manager, scoring, block/tie handling, GameRulesConfig.
-2. ai/ (pure Dart): strategies per difficulty; reads engine state only.
-3. state/ (Riverpod): connects engine to UI; one controller per match.
-4. ui/ (Flutter): screens, widgets, themes, localization (ar RTL, en LTR).
-5. rendering/: tile and table painting (widgets + CustomPainter first;
-   evaluate Flame in Phase 3 only if animation needs justify it).
-6. data/: unified `GameDataCenter` & `PlayerAccount` (single source of truth for Guest & Authenticated accounts, public peer profiles, and cumulative match stats).
-7. network/: transport-agnostic authoritative room engine (`AuthoritativeRoomHost`, `RoomClientSession`, `SeatMapper`, anti-cheat `MaskedMatchPayload`) + 3 Local Multiplayer transports (`wifiOffline`, `bluetooth`, `localWifi`) with identical framing & performance, directly reusable by the Phase 7 Online WebSocket server.
-
-## Key Decisions
-- Riverpod: simple, testable, less boilerplate than Bloc here.
-- Engine is immutable-state + pure functions: easy tests, replay,
-  and reuse on a future Dart server.
-- Rules live in GameRulesConfig, so Azneef can be added as a variant
-  (spinner support) without rewriting core logic.
--Backend decision (confirmed 2026-11-25): Pure-Dart WebSocket + REST server (`server/`) reusing `lib/engine/`, `lib/ai/`, and `lib/network/` directly, paired with `GameDataCenter` (`Guest` + `Authenticated` accounts).
--Startup & loading UX: Native OS launch screens (`#140B07` dark walnut on Android & iOS) transition without white flash into `SplashScreen` (`lib/ui/screens/splash_screen.dart`), which verifies `GameDataCenter` session state and pre-warms `SoundService` assets before fading into `AppShellScreen`. Network/room/matchmaking waits display `GameLoadingOverlay` (`lib/ui/widgets/game_loading_overlay.dart`).
-- Settings live in a Riverpod NotifierProvider (immutable SettingsState),
-  persisted with shared_preferences (small key/value data only). Storage is
-  injected via sharedPreferencesProvider so tests use a fake one. Invalid
-  saved values fall back to defaults. The app root watches the language from
-  it, so switching language updates direction (RTL/LTR) instantly.
-- Screens receive plain data (names, scores, counts) and know nothing about
-  the engine, so the game screen layout is independent of the visual style.
-  A future redesign changes widgets/painters, not the layout contract.
-- engine/ holds pure-Dart game logic: DominoPiece, Dealer (2-2-3 deal,
-  invalid-deal prevention, 2p alternate-draw opening double), Board (line of
-  play, end matching, orientation), RoundState (turns, legal moves,
-  pass/draw, playHistory, passHistory, drawHistory, domino/blocked/burned),
-  RoundResult, GameRulesConfig (targetScore, aiDifficulty), SeatOccupant
-  (human vs bot seat state + endgame hot-join cutoff), and MatchState
-  (multi-round scoring, round history, target-score match end).
-- ai/ holds pure-Dart AI strategies (`AiDifficulty`, `DominoAi`,
-  `UserPlayProfile`, and the 10 named `AiPersona` characters) supporting 4
-  deterministic difficulty levels (`easy`, `medium`, `hard`, `expert`) with
-  Bayesian unseen-tile hand prediction, pass & 2p boneyard draw deduction,
-  partner move-signal analysis, 2-ply lookahead resilience, and persistent
-  learning from the human player's moves.
-- state/ holds MatchController (`matchControllerProvider`, Riverpod
-  `NotifierProvider.autoDispose.family`) which owns MatchState, per-seat
-  `SeatOccupant`s (with distinct `AiPersona` bots, `replaceHumanWithBot`, and
-  `tryHotJoinHuman`), turn timers, and AI/draw/pass scheduling, emitting
-  immutable MatchViewState snapshots to GameScreen.
-- core/games/game_catalog.dart provides a data-driven GameCatalog registry so
-  additional games can be plugged in under `lib/games/<game_id>/` without
-  modifying the 5-tab AppShellScreen (`lib/ui/screens/app_shell_screen.dart`).
-- rendering/ holds SerpentineLayout (pure Dart, fixed tile width from area),
-  BoardFrame, BoardView (with smooth pan + fallback scale for single-arm
-  overflow), DominoTile/DominoBack painters, and tile/table skins.
-
-## Proposed Folder Structure
-lib/
-  engine/  ai/  state/  ui/  rendering/  data/  l10n/  core/
-test/
-  engine/  ai/
-docs/
-
-## Technical Risks
-- Realistic tile art quality.
-- UI built (Phase 3) before the real engine (Phase 4): UI must depend on
-  an interface so the engine can be swapped in without rewrites.
-- Legal/platform review for any real-money feature.
-- Rule ambiguity: tracked as [ASSUMED] items in game_rules.md.
-- Each match carries its own GameRulesConfig (target score, later more
-  options). A running match never reads the global settings. Online, the
-  server stores the config in the room and uses the same object.
+1. `lib/engine/` (**Pure Dart**, zero Flutter imports): `DominoPiece`, `Dealer` (2-2-3 deal, invalid-deal prevention, 2p alternate opening draw), `Board`, `RoundState`, `RoundResult`, `GameRulesConfig`, `SeatOccupant`, `MatchState`, `MatchViewState`.
+2. `lib/ai/` (**Pure Dart**): `AiDifficulty` (`easy`..`expert`), `DominoAi` (Bayesian unseen-tile inference, pass/draw deduction, 4p partner coordination, 2-ply lookahead), `UserPlayProfile`, and 10 `AiPersona` characters.
+3. `lib/data/` (**Pure Dart** models + Riverpod `GameDataCenter`): `PlayerAccount`, `CafeProgression`, `CafeShopCatalog` (3d / 7d rentals & permanent ownership across 6 categories), and `CafeEventDefinition` / `CafeTournamentTier`.
+4. `lib/network/` & `lib/server/` (**Pure Dart** authoritative multiplayer & backend):
+   - `AuthoritativeRoomHost`, `RoomClientSession`, anti-cheat `MaskedMatchPayload`.
+   - Local transports: `lan_socket_transport.dart` (`localWifi`, `wifiOffline`) and native Kotlin/Swift `NearbyP2pBridge` (`bluetooth`, Wi-Fi Direct).
+   - Online backend (`DominoOnlineServer`, `bin/server.dart`, `Dockerfile`): REST Auth (`/api/auth/*`, `/api/account/delete-self`), LiveOps (`/api/live-ops`), WebSocket rooms & matchmaking (`/ws`), and 4-tab Arabic Web Admin Dashboard (`/admin`, `/api/admin/*`).
+5. `lib/rendering/` & `lib/ui/`:
+   - `package:material_ui/material_ui.dart` & `package:cupertino_ui/cupertino_ui.dart` (never `package:flutter/material.dart`).
+   - Custom-painted `DominoTile` (7 `TileSkin`s), `BoardFrame` + `BoardTheme` (16 cloths/carpets/mosaics/marbles & country flags), `SerpentineLayout`, `CafeAvatarFrame`, `CafePropWidget`, and `AiPersonaAvatar`.
+   - `ConnectivityNotifier` (`lib/core/network/connectivity_provider.dart`) gating Offline-Only play vs Full Online Café.
